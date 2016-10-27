@@ -19,6 +19,6 @@ hg19idx=$(idxDir)/hg19/hg19-rsem
 # data/RSEM/%.genes.results:data/BAM/%.bam
 # 	$(rsemDir)/rsem-calculate-expression -p $(cores) --bam --estimate-rspd --append-names $^ $(index) $(@D)/$(basename $(basename $(@F)))
 
-data/RSEM/%.genes.results:data/FASTQ/%.fastq
+data/RSEM/hg19/%.genes.results:data/FASTQ/%.fastq
 	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(hg19idx) $(@D)/$(basename $(basename $(@F)))
 
