@@ -7,18 +7,17 @@ clean:
 cores=20
 rsemDir=/u/w/e/welch/Desktop/Docs/Code/lib/RSEM-1.3.0
 idxDir=../refs
-akataEBVidx=$(idxDir)/AKATA-EBV/AKATA_EBV-RSEM
 hg19idx=$(idxDir)/hg19/hg19-rsem
+akataidx=$(idxDir)/AKATA-GFP/AKATA_GFP_RSEM
 
-# data/SAM/%.sam:data/FASTQ/%.fastq
-# 	bowtie -q -S --best -p $(cores) -v 2 -m 1 -a --strata $(index) $^ $@ 
-
-# data/BAM/%.bam:data/SAM/%.sam
-# 	samtools view -bS $^ > $@
-
-# data/RSEM/%.genes.results:data/BAM/%.bam
-# 	$(rsemDir)/rsem-calculate-expression -p $(cores) --bam --estimate-rspd --append-names $^ $(index) $(@D)/$(basename $(basename $(@F)))
-
+# RSEM evaluation
 data/RSEM/hg19/%.genes.results:data/FASTQ/%.fastq
 	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(hg19idx) $(@D)/$(basename $(basename $(@F)))
 
+data/RSEM/AKATA-GFP/%.genes.results:data/FASTQ/%.fastq
+	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(akataidx) $(@D)/$(basename $(basename $(@F)))
+
+
+# parse RSEM-bowtie into table
+manuscript/%.txt:manuscript/logs/%/*
+	rscripts/create_aligned_reads_report.R --verbose TRUE --directory $(<D) --outputfile $@ --aligner bowtie

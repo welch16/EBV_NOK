@@ -14,6 +14,7 @@ parse_RSEM_bowtie_log <- function(file)
   require(readr)
   require(dplyr)
   require(magrittr)
+
   logs = read_file(file)
   logs = strsplit(logs,"\n")
   logs = logs[[1]]
