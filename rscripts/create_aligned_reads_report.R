@@ -3,7 +3,7 @@
 library(optparse)
 
 option_list = list(
-  make_option(c("-v","--verbose"),action = "store_true",default = TRUE,
+  make_option(c("-v","--verbose"),action = "store_true",default = TRUE,type = "logical",
               help = "Print extra output"),
   make_option(c("-d","--directory"),action = "store_true",default = "",type = "character",
               help = "Directory where the logs are stored"),
