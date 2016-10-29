@@ -25,7 +25,6 @@ optList = list(
 opt = parse_args(OptionParser(option_list = optList))
 
 library(base)
-
 opt$A = Sys.glob(opt$A)
 opt$B = Sys.glob(opt$B)
 opt$A_diff = Sys.glob(opt$A_diff)
@@ -41,12 +40,7 @@ stopifnot(opt$type %in% c("none", "kallisto", "salmon", "sailfish","rsem"))
 
 getRep <- function(files)
 {
-  files = basename(files)
-  ff = strsplit(files, ".",fixed = TRUE)
-  ff = lapply(ff,function(x)x[grep("rep",x)])
-  ff = strsplit(unlist(ff),"-",fixed = TRUE)
-  ff = lapply(ff,function(x)x[grep("rep",x)])
-  unlist(ff)    
+  paste0("rep",seq_along(files))
 }
 
 names(opt$A) = getRep(opt$A)
