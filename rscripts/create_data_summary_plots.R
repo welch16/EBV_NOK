@@ -38,10 +38,7 @@ stopifnot(all(file.exists(opt$A)),
 
 stopifnot(opt$type %in% c("none", "kallisto", "salmon", "sailfish","rsem"))
 
-getRep <- function(files)
-{
-  paste0("rep",seq_along(files))
-}
+source("rfuns/geneExpression_visualization.R")
 
 names(opt$A) = getRep(opt$A)
 names(opt$A_diff) = getRep(opt$A_diff)
@@ -61,62 +58,23 @@ library(hexbin)
 
 
 ## load files
-A = tximport(opt$A,type = opt$type,reader = read_tsv)
-A_diff = tximport(opt$A_diff,type = opt$type,reader = read_tsv)
-B = tximport(opt$B,type = opt$type,reader = read_tsv)
-B_diff = tximport(opt$B_diff,type = opt$type,reader = read_tsv)
-
-## using geometric mean, we average per replicate and create a tibble
-gemean <- function(x,...)exp(mean(log(x),...))
-rowGeoMeans <- function(mat)apply(mat,1,gemean)
-
-createDataTable <- function(A,A_diff,B,B_diff,what = c("abundance","counts"))
-{
-
-  genes = A[[what]] %>% rownames %>%
-    strsplit("_",fixed = TRUE) %>%
-    sapply(function(x)x[2])
-  
-  DT = tibble(
-    genes = genes,
-    A = rowGeoMeans(A[[what]]),
-    A_diff = rowGeoMeans(A_diff[[what]]),
-    B = rowGeoMeans(B[[what]]),
-    B_diff = rowGeoMeans(B_diff[[what]]))
-
-  DT = DT %>%
-    mutate(log2FC_A = log2(1 + A_diff) - log2(1 + A),
-           log2FC_B = log2(1 + B_diff) - log2(1 + B))
-
-  DT
-}
+A = tximport(opt$A,type = opt$type,importer = read_tsv)
+A_diff = tximport(opt$A_diff,type = opt$type,importer = read_tsv)
+B = tximport(opt$B,type = opt$type,importer = read_tsv)
+B_diff = tximport(opt$B_diff,type = opt$type,importer = read_tsv)
 
 countDT = createDataTable(A,A_diff,B,B_diff,"counts")
 abundanceDT = createDataTable(A,A_diff,B,B_diff,"abundance")
-
-pal = viridis(1e3, option = "D")
 
 theme_set(theme_bw())
 
 sc = 5
 
 pdf(file = paste0(opt$outputfile, "_abundance_hexbin_plot.pdf"))
-abundanceDT %>% ggplot(aes(log2FC_A,log2FC_B))+stat_binhex(bins = 140)+
-  scale_fill_gradientn(colours = pal,trans = "log10",
-                labels = trans_format('log10',math_format(10^.x)),
-                guide = guide_colourbar(title = NULL,
-                  barheight = unit(.92,"npc"),
-                  barwidth = unit(0.01,"npc")))+
-  xlim(-sc,sc)+ylim(-sc,sc)+xlab(opt$xlab)+ylab(opt$ylab)
+geneExpression_count_plot(abundanceDT,"log2FC_A","log2FC_B",opt,sc)
 dev.off()
 
 pdf(file = paste0(opt$outputfile, "_counts_hexbin_plot.pdf"))
-countDT %>% ggplot(aes(log2FC_A,log2FC_B))+stat_binhex(bins = 140)+
-  scale_fill_gradientn(colours = pal,trans = "log10",
-                labels = trans_format('log10',math_format(10^.x)),
-                guide = guide_colourbar(title = NULL,
-                  barheight = unit(.92,"npc"),
-                  barwidth = unit(0.01,"npc")))+
-  xlim(-sc,sc)+ylim(-sc,sc)+xlab(opt$xlab)+ylab(opt$ylab)
+geneExpression_count_plot(countDT,"log2FC_A","log2FC_B",opt,sc)
 dev.off()
 
