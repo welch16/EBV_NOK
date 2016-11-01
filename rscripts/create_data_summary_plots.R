@@ -38,7 +38,7 @@ stopifnot(all(file.exists(opt$A)),
 
 stopifnot(opt$type %in% c("none", "kallisto", "salmon", "sailfish","rsem"))
 
-source("rfuns/geneExpression_visualization.R")
+source("rfuns/geneExpression_analysis.R")
 
 names(opt$A) = getRep(opt$A)
 names(opt$A_diff) = getRep(opt$A_diff)
