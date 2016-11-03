@@ -96,6 +96,7 @@ DESeq_MA_plot <- function(results,pal,fdr)
     filter(foldChange < quantile(foldChange,prob = .99))
   yl = results %>% select(foldChange) %>%
     mutate(aa = log2(foldChange)) %>% range %>% abs %>% max %>% round
+  yl = min(yl, 5)
   results = results %>% mutate(log2 = log2(foldChange)) %>%
     filter( between(log2,-yl,yl))
   ggplot(results,
@@ -119,7 +120,7 @@ DESeq_pval_hist <- function(results,fdr)
     mutate( dd = ifelse(padj <= fdr,"yes","no"))
 
   ggplot(results,
-         aes(pval,fill = dd))+geom_histogram(binwidth = .025)+
+         aes(pval,fill = dd))+geom_histogram(binwidth = .01)+
     xlab("p.value")+ylab("number of genes")+
     theme(legend.position = "top")+
     scale_fill_manual(values = c("black","red") , name  = paste0("fdr <= ",fdr))
