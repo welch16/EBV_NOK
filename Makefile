@@ -49,8 +49,9 @@ figs/exploratory/hg19/ben_CaFBS_NOK_vs_MC_NOV.counts_hexbin_plot.pdf:data/RSEM/h
 dataDr=data/RSEM/hg19
 outDr=/u/w/e/welch/Desktop/Docs/auxdir/EBV/data/Diff.Genes/hg19/DESeq
 figsDr=/u/w/e/welch/Desktop/Docs/auxdir/EBV/figs/diff_expression/DESeq
+fdr=0.01
 
-EBSeq_diff_expression:
+DESeq_diff_expression:
 	make $(outDr)/ben_CaFBS_NOK_diff_exp_genes.tsv   &
 	make $(outDr)/ben_CaFBS_EBV_NOK_diff_exp_genes.tsv & 
 	make $(outDr)/ben_MC_NOK_diff_exp_genes.tsv  &
@@ -58,24 +59,28 @@ EBSeq_diff_expression:
 	make $(outDr)/scott_MC_NOK_diff_exp_genes.tsv &
 	make $(outDr)/scott_MC_EBV_NOK_diff_exp_genes.tsv &
 
+gene_overlap:
+	make $(outDr)/comparison_MC_old_vs_scott.tsv & 
+
 $(outDr)/ben_CaFBS_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-noks-CaFBS-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_CaFBS_NOK --fdr 0.05 
+	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-noks-CaFBS-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_CaFBS_NOK --fdr $(fdr)
 
 $(outDr)/ben_CaFBS_EBV_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-akata-noks-CaFBS-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_CaFBS_EBV_NOK --fdr 0.05 
+	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-akata-noks-CaFBS-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_CaFBS_EBV_NOK --fdr $(fdr)
 
 $(outDr)/ben_MC_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-noks-methyl_cell-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_MC_NOK --fdr 0.05 
+	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-noks-methyl_cell-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_MC_NOK --fdr $(fdr)
 
 $(outDr)/ben_MC_EBV_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_MC_EBV_NOK --fdr 0.05 
+	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --cond '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/ben_MC_EBV_NOK --fdr $(fdr) 
 
 $(outDr)/scott_MC_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-Noks-mono-rep?.genes.results' --cond '$(dataDr)/RNAseq-Noks-MC-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/scott_MC_NOK --fdr 0.05 
+	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-Noks-mono-rep?.genes.results' --cond '$(dataDr)/RNAseq-Noks-MC-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/scott_MC_NOK --fdr $(fdr)
 
 $(outDr)/scott_MC_EBV_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-Noks_EBV-mono-rep?.genes.results' --cond '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/scott_MC_EBV_NOK --fdr 0.05 
+	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-Noks_EBV-mono-rep?.genes.results' --cond '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/scott_MC_EBV_NOK --fdr $(fdr)
 
-
+$(outDr)/comparison_MC_old_vs_scott.tsv:$(outDr)/*.tsv
+	rscripts/perform_gene_overlap_analysis.R --data_1A $(outDr)/ben_MC_NOK_diff_exp_genes.tsv --data_2A $(outDr)/scott_MC_NOK_diff_exp_genes.tsv --data_1B $(outDr)/ben_MC_EBV_NOK_diff_exp_genes.tsv --data_2B $(outDr)/scott_MC_EBV_NOK_diff_exp_genes.tsv --outfile $@ --cells 'NOK,EBV_NOK' --treatment 'none,MC' --figs $(figsDr)/gene_overlap_MC_NOK_vs_EBV
 
 
