@@ -4,23 +4,23 @@ clean:
 	find . -type f -name '.*~' -delete
 
 # parameters
-cores=20
-rsemDir=/u/w/e/welch/Desktop/Docs/Code/lib/RSEM-1.3.0
-idxDir=../refs
-hg19idx=$(idxDir)/hg19/hg19-rsem
-akataidx=$(idxDir)/AKATA-GFP/AKATA_GFP_RSEM
+# cores=20
+# rsemDir=/u/w/e/welch/Desktop/Docs/Code/lib/RSEM-1.3.0
+# idxDir=../refs
+# hg19idx=$(idxDir)/hg19/hg19-rsem
+# akataidx=$(idxDir)/AKATA-GFP/AKATA_GFP_RSEM
 
-# RSEM evaluation
-data/RSEM/hg19/%.genes.results:data/FASTQ/%.fastq
-	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(hg19idx) $(@D)/$(basename $(basename $(@F)))
+# # RSEM evaluation
+# data/RSEM/hg19/%.genes.results:data/FASTQ/%.fastq
+# 	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(hg19idx) $(@D)/$(basename $(basename $(@F)))
 
-data/RSEM/AKATA-GFP/%.genes.results:data/FASTQ/%.fastq
-	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(akataidx) $(@D)/$(basename $(basename $(@F)))
+# data/RSEM/AKATA-GFP/%.genes.results:data/FASTQ/%.fastq
+# 	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(akataidx) $(@D)/$(basename $(basename $(@F)))
 
 
-# parse RSEM-bowtie into table
-manuscript/%.txt:manuscript/logs/%/*
-	rscripts/create_aligned_reads_report.R --verbose TRUE --directory $(<D) --outputfile $@ --aligner bowtie
+# # parse RSEM-bowtie into table
+# manuscript/%.txt:manuscript/logs/%/*
+# 	rscripts/create_aligned_reads_report.R --verbose TRUE --directory $(<D) --outputfile $@ --aligner bowtie
 
 #############################################################################################################################################################################################
 
@@ -44,11 +44,13 @@ figs/exploratory/hg19/scott_MC_NOK_vs_EBV.counts_hexbin_plot.pdf:data/RSEM/hg19/
 figs/exploratory/hg19/ben_CaFBS_NOK_vs_MC_NOV.counts_hexbin_plot.pdf:data/RSEM/hg19/*.genes.results
 	rscripts/create_data_summary_plots.R --A '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --A_diff --A_diff '$(dataDr)/RNAseq-noks-CaFBS-rep?.genes.results' --B '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --B_diff '$(dataDr)/RNAseq-noks-methyl_cell-rep?.genes.results' --type rsem --outputfile $(@D)/$(basename $(basename $(@F))) --xlab 'log2FC(CaFBS)' --ylab 'log2FC(MC)' 
 
+exploratory_EBV_plots:
+
 #############################################################################################################################################################################################
 
 dataDr=data/RSEM/hg19
-outDr=/u/w/e/welch/Desktop/Docs/auxdir/EBV/data/Diff.Genes/hg19/DESeq
-figsDr=/u/w/e/welch/Desktop/Docs/auxdir/EBV/figs/diff_expression/DESeq
+outDr=data/Diff.Genes/hg19/DESeq
+figsDr=figs/diff_expression/DESeq
 fdr=0.01
 
 DESeq_diff_expression:
@@ -80,7 +82,12 @@ $(outDr)/scott_MC_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
 $(outDr)/scott_MC_EBV_NOK_diff_exp_genes.tsv:$(dataDr)/*.genes.results
 	rscripts/perform_differential_expression_analysis.R --base '$(dataDr)/RNAseq-Noks_EBV-mono-rep?.genes.results' --cond '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --outfile $@ --type rsem --package deseq --figs $(figsDr)/scott_MC_EBV_NOK --fdr $(fdr)
 
+# ******
+
+gene_overlap_comparison:
+	make $(outDr)/comparison_MC_old_vs_scott.tsv
+
 $(outDr)/comparison_MC_old_vs_scott.tsv:$(outDr)/*.tsv
-	rscripts/perform_gene_overlap_analysis.R --data_1A $(outDr)/ben_MC_NOK_diff_exp_genes.tsv --data_2A $(outDr)/scott_MC_NOK_diff_exp_genes.tsv --data_1B $(outDr)/ben_MC_EBV_NOK_diff_exp_genes.tsv --data_2B $(outDr)/scott_MC_EBV_NOK_diff_exp_genes.tsv --outfile $@ --cells 'NOK,EBV_NOK' --treatment 'none,MC' --figs $(figsDr)/gene_overlap_MC_NOK_vs_EBV
+	rscripts/perform_gene_overlap_analysis.R --data_1A $(outDr)/ben_MC_NOK_diff_exp_genes.tsv --data_2A $(outDr)/scott_MC_NOK_diff_exp_genes.tsv --data_1B $(outDr)/ben_MC_EBV_NOK_diff_exp_genes.tsv --data_2B $(outDr)/scott_MC_EBV_NOK_diff_exp_genes.tsv --outfile $@ --cells 'NOK,EBV_NOK' --datasets 'none,MC' --figs $(figsDr)/gene_overlap_MC_NOK_vs_EBV
 
 
