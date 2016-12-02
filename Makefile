@@ -4,10 +4,10 @@ clean:
 	find . -type f -name '.*~' -delete
 
 # parameters
-# cores=20
-# rsemDir=/u/w/e/welch/Desktop/Docs/Code/lib/RSEM-1.3.0
-# idxDir=../refs
-# hg19idx=$(idxDir)/hg19/hg19-rsem
+cores=20
+rsemDir=/u/w/e/welch/Desktop/Docs/Code/lib/RSEM-1.3.0
+idxDir=../refs
+hg19idx=$(idxDir)/hg19/hg19-rsem
 # akataidx=$(idxDir)/AKATA-GFP/AKATA_GFP_RSEM
 
 # # RSEM evaluation
@@ -17,6 +17,20 @@ clean:
 # data/RSEM/AKATA-GFP/%.genes.results:data/FASTQ/%.fastq
 # 	$(rsemDir)/rsem-calculate-expression -p $(cores) --estimate-rspd --append-names $^ $(akataidx) $(@D)/$(basename $(basename $(@F)))
 
+# Sort bam files from trasncripts
+data/BAM/hg19/%.genome.bam:data/RSEM/hg19/%.transcript.bam
+	$(rsemDir)/rsem-tbam2gbam $(idxDir)/hg19/hg19-rsem $^ $@ 
+
+data/BAM/hg19/%.genome.sort.bam:data/BAM/hg19/%.genome.bam
+	bamtools sort -in $^ -out $@
+
+data/WIG/hg19/%.wig:data/BAM/hg19/%.genome.sort.bam
+	$(rsemDir)/rsem-bam2wig $^ $@ $(@F)
+
+
+hg19.sizes=/p/keles/SOFTWARE/hg19.chrom.sizes
+data/BW/hg19/%.bw:data/WIG/hg19/%.wig
+	wigToBigWig $^ $(hg19.sizes) $@
 
 # # parse RSEM-bowtie into table
 # manuscript/%.txt:manuscript/logs/%/*
@@ -113,15 +127,15 @@ DESeq2_contrast_diff_expression:
 	make $(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1.tsv &
 
 $(outDr)/ben_CaFBS_diff_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --A_Tr '$(dataDr)/RNAseq-noks-CaFBS-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-akata-noks-CaFBS-rep?.genes.results' --cells 'NOK,EBV_NOK' --treatments 'none,CaFBS' --treattestfile $@ --celltestfile $(outDr)/ben_CaFBS_EBV_diff_genes.tsv --type rsem --figs $(figsDr)/ben_CaFBS
+	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --A_Tr '$(dataDr)/RNAseq-noks-CaFBS-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-akata-noks-CaFBS-rep?.genes.results' --cells 'NOK,EBV' --treatments 'none,CaFBS' --outfile $@ --type rsem --figs $(figsDr)/ben_CaFBS
 
 $(outDr)/ben_MC_diff_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --A_Tr '$(dataDr)/RNAseq-noks-methyl_cell-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-akata-noks-methyl_cell-rep?.genes.results' --cells 'NOK,EBV_NOK' --treatments 'none,MC' --treattestfile $@ --celltestfile $(outDr)/ben_MC_EBV_diff_genes.tsv --type rsem --figs $(figsDr)/ben_MC
+	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-noks-no_treatment-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-akata-noks-no_treatment-rep?.genes.results' --A_Tr '$(dataDr)/RNAseq-noks-methyl_cell-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-akata-noks-methyl_cell-rep?.genes.results' --cells 'NOK,EBV' --treatments 'none,MC' --outfile $@ --type rsem --figs $(figsDr)/ben_MC
 
 $(outDr)/scott_MC_diff_genes.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-Noks-mono-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-Noks_EBV-mono-rep?.genes.results' --A_Tr '$(dataDr)/RNAseq-Noks-MC-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --cells 'NOK,EBV_NOK' --treatments 'none,MC' --treattestfile $@ --celltestfile $(outDr)/scott_MC_EBV_diff_genes.tsv --type rsem --figs $(figsDr)/scott_MC
+	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-Noks-mono-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-Noks_EBV-mono-rep?.genes.results' --A_Tr '$(dataDr)/RNAseq-Noks-MC-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --cells 'NOK,EBV' --treatments 'none,MC' --outfile $@ --type rsem --figs $(figsDr)/scott_MC
 
 $(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1.tsv:$(dataDr)/*.genes.results
-	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-Noks-mono-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-Noks_EBV-mono-rep2.genes.results,$(dataDr)/RNAseq-Noks_EBV-mono-rep3.genes.results,$(dataDr)/RNAseq-Noks_EBV-mono-rep4.genes.results' --A_Tr '$(dataDr)/RNAseq-Noks-MC-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --cells 'NOK,EBV_NOK' --treatments 'none,MC' --treattestfile $@ --celltestfile $(outDr)/scott_MC_EBV_diff_genes_wo_noTr_EBV-NOK_rep1.tsv --type rsem --figs $(figsDr)/scott_MC_wo_noTr_EBV-NOK_rep1
+	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-Noks-mono-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-Noks_EBV-mono-rep2.genes.results,$(dataDr)/RNAseq-Noks_EBV-mono-rep3.genes.results,$(dataDr)/RNAseq-Noks_EBV-mono-rep4.genes.results' --A_Tr '$(dataDr)/RNAseq-Noks-MC-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --cells 'NOK,EBV' --treatments 'none,MC' --outfile $@ --type rsem --figs $(figsDr)/scott_MC_wo_noTr_EBV-NOK_rep1
 
 
