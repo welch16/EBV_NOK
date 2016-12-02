@@ -15,10 +15,8 @@ optList = list(
                 help = "Names of the two cell lines separated by ','. The default value is 'A,B'"),
     make_option("--treatments",action = "store_true",type = "character",default = "no,yes",
                 help = "Names of the two treatments separated by ','. The default value is 'no,yes'"),
-    make_option("--treattestfile", action = "store_true",default = tempfile(),type = "character",
-                help = "Name of the outfile where the output list of genes is saved"),
-    make_option("--celltestfile",action = "store_true",default = tempfile(),type = "character",
-                help = "Name of the outfile where the differentially expressed genes by cell are saved"),
+    make_option("--outfile", action = "store_true",default = tempfile(),type = "character",
+                help = "Name of the outfile where the test results are saved."),
     make_option(c("-t","--type"),action = "store_true",default = "rsem",type = "character",
                 help = "Tool used to quantify transcripts. The default value is 'rsem'"),
     make_option("--figs",action = "store_true",type = "character",default = "./Rplots",
@@ -41,6 +39,11 @@ separateFiles <- function(ff)
   }
   ff
 }
+
+## opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
+## opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep?.genes.results"
+## opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
+## opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"
  
 opt$A_noTr = separateFiles(opt$A_noTr)
 opt$B_noTr = separateFiles(opt$B_noTr)
@@ -87,6 +90,12 @@ coldata = data.frame(
              rep(treat[2],length(opt$A_Tr)),
              rep(treat[2],length(opt$B_Tr))))
 
+coldata$interac = paste(coldata$cell,coldata$treat,sep = "_")
+
+coldata$cell = factor(coldata$cell)
+coldata$treat = factor(coldata$treat)
+coldata$interac = factor(coldata$interac)
+
 rownames(coldata) = names(allfiles)
 
 
@@ -96,41 +105,76 @@ library(DESeq2,quietly = TRUE)
 
 deseq = DESeqDataSetFromMatrix(
     round(txdata[["counts"]]),colData = coldata,
-                               design= ~ cell + treat)
+                               design= ~ cell + treat + cell:treat)
+
 deseq = deseq[rowSums(counts(deseq)) > 1,]
 
+## 
 deseq_model = DESeq(deseq)
 
-deseq_results = results(deseq_model,contrast = c("treat",rev(treat)))
-deseq_cell = results(deseq_model,contrast = c("cell",cells))
+my_results = list()
+my_results[["full"]] = results(deseq_model)
+my_results[["cell"]] = results(deseq_model,contrast = c("cell",cells))
+my_results[["treat"]] = results(deseq_model,contrast = c("treat",rev(treat)))
 
-genes = deseq_results %>% rownames %>% strsplit("_") %>%
+design(deseq) <- ~ interac
+deseq_model = DESeq(deseq)
+
+interac = expand.grid(cell = cells,treat = treat) %>% mutate(interac = paste(cell,treat,sep = "_")) %>%
+    select(interac)
+
+grepv <- function(pattern, x, ignore.case = FALSE, perl = FALSE, value = FALSE, 
+                  fixed = FALSE, useBytes = FALSE, invert = FALSE)
+{
+  x[grep(pattern,x,ignore.case,perl,value,fixed,useBytes,invert)]
+}
+
+## print(cells[1])
+## print(interac)
+## print(grepv(cells[1],interac[[1]]) %>% rev)
+## print(coldata)
+
+
+my_results[[paste0("cell_",cells[1])]] = results(deseq_model,
+    contrast = c("interac",grepv(cells[1],interac[[1]]) %>% rev))
+my_results[[paste0("cell_",cells[2])]] = results(deseq_model,
+    contrast = c("interac",grepv(cells[2],interac[[1]]) %>% rev))                                           
+
+my_results[[paste0("treat_",treat[1])]] = results(deseq_model,
+    contrast = c("interac",grepv(treat[1],interac[[1]])))
+my_results[[paste0("treat_",treat[2])]] = results(deseq_model,
+    contrast = c("interac",grepv(treat[2],interac[[1]])))
+
+genes = my_results[[1]] %>% rownames %>% strsplit("_") %>%
     sapply(function(x)x[2])
 
-results = deseq_results %>% as.data.frame %>%
-    as.tbl %>% mutate(gene = genes) %>%
-    select(gene,padj,log2FC = log2FoldChange,everything())
+clean_results <- function(res, genes)
+{
+    res %>% as.data.frame %>%
+        as.tbl %>% mutate(gene = genes) %>%
+        select(gene,baseMean,log2FC = log2FoldChange,pvalue,padj)
+}
 
-print(
-    results %>% arrange(desc(log2FC)) %>% head(10)
-)
+my_results_DF = my_results %>% lapply(clean_results,genes)
 
-print(
-    results %>% arrange(log2FC) %>% head(10)
-)
+rename_cols <- function(x,label)
+{
+    nms = names(x)
+    nms[nms != "gene"] = paste(label, nms[nms != "gene"],sep = ":")
+    names(x) = nms
+    x    
+}
 
-cell_results = deseq_cell %>% as.data.frame %>% as.tbl %>%
-    mutate(gene = genes) %>%
-    select(gene,padj,log2FC = log2FoldChange,everything())
+my_results_DF = mapply(rename_cols,my_results_DF,names(my_results_DF),
+                       SIMPLIFY = FALSE)
 
-print(
-    cell_results %>% arrange(desc(log2FC)) %>% head(10)
-)
+my_results = Reduce(function(...) merge(..., by='gene', all.x=TRUE),my_results_DF) %>% as.tbl
 
-print(
-    cell_results %>% arrange(log2FC) %>% head(10)
-)
 
+write_delim(my_results,opt$outfile,delim = "\t")
+
+
+## plot
 
 rld = rlog(deseq_model,blind = FALSE)
 
@@ -154,20 +198,38 @@ mat = assay(rld)[,]
 mat = mat - rowMeans(mat)
 rownames(mat) = genes
 
+r = viridis::viridis(1e3,option = "D")
+
 K = 20
 topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,
+pheatmap(mat[topgenes,],annotation_col = coldata,color = r,
              filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
 
 K = 50
 topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,
+pheatmap(mat[topgenes,],annotation_col = coldata,color = r,
              filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
 
-write_delim(results %>% select(gene,baseMean,log2FC,pvalue,padj),
-            opt$treattestfile , delim = "\t")
-write_delim(cell_results %>% select(gene,baseMean,log2FC,pvalue,padj),
-            opt$celltestfile,delim = "\t")
+K = 100
+topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
+pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
+             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
+
+K = 5e2
+topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
+pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
+             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
+
+K = 1e3
+topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
+pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
+             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
+
+K = 5e3
+topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
+pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
+             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
+
 
 
 
