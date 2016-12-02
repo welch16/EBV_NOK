@@ -20,12 +20,20 @@ optList = list(
     make_option(c("-t","--type"),action = "store_true",default = "rsem",type = "character",
                 help = "Tool used to quantify transcripts. The default value is 'rsem'"),
     make_option("--figs",action = "store_true",type = "character",default = "./Rplots",
-              help = "Directory where the figures are being saved")
-  ## make_option("--fdr",action = "store_true",type = "numeric",default = 0.05,
-  ##             help = "FDR used to call differentially expressed genes")
+                help = "Directory where the figures are being saved"),
+    make_option("--fdr",action = "store_true",type = "numeric",default = 1e-3,
+               help = "FDR used to call differentially expressed genes")
   )
 
 opt = parse_args(OptionParser(option_list = optList))
+
+opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
+opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results"
+opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
+opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"  
+
+opt$cells = "NOK,EBV"
+opt$treatments = "none,MC"  
 
 library(base,quietly = TRUE)
 library(magrittr,quietly = TRUE)
@@ -58,10 +66,13 @@ library(ggplot2,quietly = TRUE)
 
 source("rfuns/geneExpression_analysis.R")
 
-names(opt$A_noTr) = getRep(opt$A_noTr,"A_noTr")
-names(opt$B_noTr) = getRep(opt$B_noTr,"B_noTr")
-names(opt$A_Tr) = getRep(opt$A_Tr,"A_Tr")
-names(opt$B_Tr) = getRep(opt$B_Tr,"B_Tr")
+cells = opt$cells %>% strsplit(",") %>% unlist
+treat = opt$treatment %>% strsplit(",") %>% unlist
+
+names(opt$A_noTr) = getRep(opt$A_noTr,paste(cells[1],treat[1],sep = "_"))
+names(opt$B_noTr) = getRep(opt$B_noTr,paste(cells[2],treat[1],sep = "_"))
+names(opt$A_Tr) = getRep(opt$A_Tr,paste(cells[1],treat[2],sep = "_"))
+names(opt$B_Tr) = getRep(opt$B_Tr,paste(cells[2],treat[2],sep = "_"))
 
 stopifnot(all(file.exists(opt$A_noTr)),
           all(file.exists(opt$B_noTr)),
@@ -75,10 +86,6 @@ allfiles = c(opt$A_noTr,opt$B_noTr,opt$A_Tr,opt$B_Tr)
 ## load files with tximport
 txdata = tximport(allfiles,
                   type = opt$type , importer = read_tsv)
-
-cells = opt$cells %>% strsplit(",") %>% unlist
-treat = opt$treatment %>% strsplit(",") %>% unlist
-
 
 coldata = data.frame(
     cell = c(rep(cells[1],length(opt$A_noTr)),
@@ -98,7 +105,6 @@ coldata$interac = factor(coldata$interac)
 
 rownames(coldata) = names(allfiles)
 
-
 theme_set(theme_bw())
 
 library(DESeq2,quietly = TRUE)
@@ -110,15 +116,15 @@ deseq = DESeqDataSetFromMatrix(
 deseq = deseq[rowSums(counts(deseq)) > 1,]
 
 ## 
-deseq_model = DESeq(deseq)
+deseq_model1 = DESeq(deseq,minReplicatesForReplace = Inf)
 
 my_results = list()
-my_results[["full"]] = results(deseq_model)
-my_results[["cell"]] = results(deseq_model,contrast = c("cell",cells))
-my_results[["treat"]] = results(deseq_model,contrast = c("treat",rev(treat)))
+my_results[["full"]] = results(deseq_model1,cooksCutoff = FALSE)
+my_results[["cell"]] = results(deseq_model1,contrast = c("cell",cells),cooksCutoff = FALSE)
+my_results[["treat"]] = results(deseq_model1,contrast = c("treat",rev(treat)),cooksCutoff = FALSE)
 
 design(deseq) <- ~ interac
-deseq_model = DESeq(deseq)
+deseq_model2 = DESeq(deseq, minReplicatesForReplace = Inf)
 
 interac = expand.grid(cell = cells,treat = treat) %>% mutate(interac = paste(cell,treat,sep = "_")) %>%
     select(interac)
@@ -135,18 +141,21 @@ grepv <- function(pattern, x, ignore.case = FALSE, perl = FALSE, value = FALSE,
 ## print(coldata)
 
 
-my_results[[paste0("cell_",cells[1])]] = results(deseq_model,
-    contrast = c("interac",grepv(cells[1],interac[[1]]) %>% rev))
-my_results[[paste0("cell_",cells[2])]] = results(deseq_model,
-    contrast = c("interac",grepv(cells[2],interac[[1]]) %>% rev))                                           
+my_results[[paste0("cell_",cells[1])]] = results(deseq_model2,
+    contrast = c("interac",grepv(cells[1],interac[[1]]) %>% rev),cooksCutoff = FALSE)
+my_results[[paste0("cell_",cells[2])]] = results(deseq_model2,
+    contrast = c("interac",grepv(cells[2],interac[[1]]) %>% rev),cooksCutoff = FALSE)
 
-my_results[[paste0("treat_",treat[1])]] = results(deseq_model,
-    contrast = c("interac",grepv(treat[1],interac[[1]])))
-my_results[[paste0("treat_",treat[2])]] = results(deseq_model,
-    contrast = c("interac",grepv(treat[2],interac[[1]])))
+my_results[[paste0("treat_",treat[1])]] = results(deseq_model2,
+    contrast = c("interac",grepv(treat[1],interac[[1]])), cooksCutoff = FALSE)
+my_results[[paste0("treat_",treat[2])]] = results(deseq_model2,
+    contrast = c("interac",grepv(treat[2],interac[[1]])), cooksCutoff = FALSE)
 
-genes = my_results[[1]] %>% rownames %>% strsplit("_") %>%
-    sapply(function(x)x[2])
+models = names(my_results)
+
+genes = my_results[[1]] %>% rownames
+
+#%>% strsplit("_") %>% sapply(function(x)x[2])
 
 clean_results <- function(res, genes)
 {
@@ -173,10 +182,64 @@ my_results = Reduce(function(...) merge(..., by='gene', all.x=TRUE),my_results_D
 
 write_delim(my_results,opt$outfile,delim = "\t")
 
-
 ## plot
 
-rld = rlog(deseq_model,blind = FALSE)
+pvalue_histogram <- function(mod,my_results)
+{
+    dd = my_results %>% select(gene,contains(mod))
+
+    if(mod %in% c("cell","treat")){
+        dd = dd[,1:5]
+    }
+
+    dd = dd %>%
+        select(gene,contains("pvalue"))
+    names(dd) = c("gene","pvalue")
+
+    dd %>% ggplot(aes(pvalue)) + geom_histogram(bins = 150) +
+        ggtitle(mod)
+
+}
+
+
+pdf(paste0(opt$figs,"_pvalue_histograms.pdf"),height = 5)
+plots = lapply(models,pvalue_histogram,my_results)
+u = lapply(plots,print)
+dev.off()
+
+volcano_plot <- function(mod,my_results,fdr = opt$fdr)
+{
+
+    nms = c("gene","log2FC","pvalue","padj")
+    dd = my_results %>% select(gene,contains(mod))
+
+    if( mod %in% c("cell","treat")){
+        dd = dd[,1:5]
+    }
+
+
+    dd = dd %>%
+        select(gene,contains("FC"),contains("pval"),contains("padj") )
+    names(dd) = nms
+
+    dd = dd %>% mutate(col = ifelse(padj <= fdr,"yes","no")) %>% filter(!is.na(padj))
+
+    mm = 1.3 * min(min(dd$log2FC),max(dd$log2FC)) %>% abs
+
+    dd %>% ggplot(aes(log2FC,-log10(pvalue),colour = col))+geom_point()+
+        scale_colour_brewer(name = paste("adjusted pval <=",fdr),palette = "Set1")+
+        theme(legend.position = "top")+ggtitle(mod)+xlim(-mm,mm)+
+        geom_vline(xintercept = 0,linetype = 2)
+
+
+}
+
+pdf(paste0(opt$figs,"_volcano_plots.pdf"))
+plots = lapply(models,volcano_plot,my_results,fdr = 1e-5)
+u = lapply(plots,print)
+dev.off()
+
+rld = rlog(deseq_model1,blind = FALSE)
 
 pdf(paste0(opt$figs,"_PCA_analysis.pdf"))
 u = plotPCA(rld,intgroup = c("cell","treat"))
@@ -222,7 +285,7 @@ pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r
 
 K = 1e3
 topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
+pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r)#,
              filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
 
 K = 5e3
