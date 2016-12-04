@@ -27,13 +27,13 @@ optList = list(
 
 opt = parse_args(OptionParser(option_list = optList))
 
-opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
-opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results"
-opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
-opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"  
+## opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
+## opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results"
+## opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
+## opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"  
 
-opt$cells = "NOK,EBV"
-opt$treatments = "none,MC"  
+## opt$cells = "NOK,EBV"
+## opt$treatments = "none,MC"  
 
 library(base,quietly = TRUE)
 library(magrittr,quietly = TRUE)
@@ -123,6 +123,57 @@ my_results[["full"]] = results(deseq_model1,cooksCutoff = FALSE)
 my_results[["cell"]] = results(deseq_model1,contrast = c("cell",cells),cooksCutoff = FALSE)
 my_results[["treat"]] = results(deseq_model1,contrast = c("treat",rev(treat)),cooksCutoff = FALSE)
 
+get_columns <- function(cond,columns)
+{
+    if(is.null(cond)){
+        out = rep(TRUE,length(columns))
+    }else{
+        if(grepl(",",cond,fixed = TRUE)){
+            cond = cond %>% strsplit(",") %>% unlist
+            out = lapply(cond,function(x)grepl(x,columns))
+            out = do.call(and,out)
+        }else{
+            out = grepl(cond,columns)
+        }
+    }
+
+    columns[out]
+}
+
+signal_to_noise <- function(model,condA,condB,cells,treats)
+{
+    
+    ## Under their model rhe counts for gene i and condition j are distributed
+    ## K_ij ~ NegBin(mu_ij , alpha_i)
+    ## where mu_ij is the mean and alpha_i is the gene specific dispersion
+    ## We define
+    ## signaltonoise_i = [mean_j mu_ij(condA) - mean_j mu_ij(condB)] / 2* alpha_i
+
+    ## cond1 & cond2 contains the restrictions of the hypothesis test
+    ## ',' means 'and'
+    ## '_' means 'when'
+   
+    mu = assays(model)[["mu"]]
+    columns = mu %>% colnames
+
+    columnsA = get_columns(condA,columns)
+    columnsB = get_columns(condB,columns)
+
+    muA = rowMeans(mu[,columns %in% columnsA])
+    muB = rowMeans(mu[,columns %in% columnsB])
+    
+    alpha = dispersions(model)
+   
+    (log2(muA) - log2(muB)) / (2 * alpha)
+}
+
+signal2noise = list()
+signal2noise[["full"]] = signal_to_noise(deseq_model1,paste(cells[1],treat[1],sep = ","),
+                                         paste(cells[2],treat[2],sep = ","),cells,treat)
+
+signal2noise[["cell"]] = signal_to_noise(deseq_model1,cells[1],cells[2],cells,treat)
+signal2noise[["treat"]] = signal_to_noise(deseq_model1,treat[2],treat[1],cells,treat)
+
 design(deseq) <- ~ interac
 deseq_model2 = DESeq(deseq, minReplicatesForReplace = Inf)
 
@@ -146,10 +197,20 @@ my_results[[paste0("cell_",cells[1])]] = results(deseq_model2,
 my_results[[paste0("cell_",cells[2])]] = results(deseq_model2,
     contrast = c("interac",grepv(cells[2],interac[[1]]) %>% rev),cooksCutoff = FALSE)
 
+signal2noise[[paste0("cell_",cells[1])]] = signal_to_noise(deseq_model2,
+    paste(cells[1],treat[2],sep = ","),paste(cells[1],treat[1],sep = ","),cells,treat)
+signal2noise[[paste0("cell_",cells[2])]] = signal_to_noise(deseq_model2,
+    paste(cells[2],treat[2],sep = ","),paste(cells[2],treat[1],sep = ","),cells,treat)
+
 my_results[[paste0("treat_",treat[1])]] = results(deseq_model2,
     contrast = c("interac",grepv(treat[1],interac[[1]])), cooksCutoff = FALSE)
 my_results[[paste0("treat_",treat[2])]] = results(deseq_model2,
     contrast = c("interac",grepv(treat[2],interac[[1]])), cooksCutoff = FALSE)
+
+signal2noise[[paste0("treat_",treat[1])]] = signal_to_noise(deseq_model2,
+    paste(treat[1],cells[1],sep = ","),paste(treat[1],cells[2],sep = ","),cells,treat)
+signal2noise[[paste0("treat_",treat[2])]] = signal_to_noise(deseq_model2,
+    paste(treat[2],cells[1],sep = ","),paste(treat[2],cells[2],sep = ","),cells,treat)
 
 models = names(my_results)
 
@@ -157,14 +218,15 @@ genes = my_results[[1]] %>% rownames
 
 #%>% strsplit("_") %>% sapply(function(x)x[2])
 
-clean_results <- function(res, genes)
-{
+clean_results <- function(res,s2n, genes)
+{   
     res %>% as.data.frame %>%
         as.tbl %>% mutate(gene = genes) %>%
-        select(gene,baseMean,log2FC = log2FoldChange,pvalue,padj)
+        select(gene,baseMean,log2FC = log2FoldChange,pvalue,padj) %>%
+        mutate(signal2noise = s2n)
 }
 
-my_results_DF = my_results %>% lapply(clean_results,genes)
+my_results_DF = mapply(clean_results,my_results,signal2noise,MoreArgs = list(genes),SIMPLIFY = FALSE)
 
 rename_cols <- function(x,label)
 {
@@ -179,7 +241,6 @@ my_results_DF = mapply(rename_cols,my_results_DF,names(my_results_DF),
 
 my_results = Reduce(function(...) merge(..., by='gene', all.x=TRUE),my_results_DF) %>% as.tbl
 
-
 write_delim(my_results,opt$outfile,delim = "\t")
 
 ## plot
@@ -189,7 +250,7 @@ pvalue_histogram <- function(mod,my_results)
     dd = my_results %>% select(gene,contains(mod))
 
     if(mod %in% c("cell","treat")){
-        dd = dd[,1:5]
+        dd = dd[,1:6]
     }
 
     dd = dd %>%
@@ -209,14 +270,13 @@ dev.off()
 
 volcano_plot <- function(mod,my_results,fdr = opt$fdr)
 {
-
+    
     nms = c("gene","log2FC","pvalue","padj")
     dd = my_results %>% select(gene,contains(mod))
 
     if( mod %in% c("cell","treat")){
-        dd = dd[,1:5]
+        dd = dd[,1:6]
     }
-
 
     dd = dd %>%
         select(gene,contains("FC"),contains("pval"),contains("padj") )
@@ -238,6 +298,31 @@ pdf(paste0(opt$figs,"_volcano_plots.pdf"))
 plots = lapply(models,volcano_plot,my_results,fdr = 1e-5)
 u = lapply(plots,print)
 dev.off()
+
+signal2noise_barplot <- function(mod,my_results)
+{    
+  
+    dd = my_results %>% select(gene,contains(mod))
+
+    if(mod %in% c("cell","treat")){
+        dd = dd[,1:6]
+    }
+
+    names(dd) = gsub(paste0(mod,":"),"",names(dd) )
+
+    dd = dd %>% arrange(signal2noise) %>%
+        mutate(gene = factor(gene,levels = gene),
+               rank = seq_len(nrow(dd)))
+
+    dd %>% ggplot(aes(rank,signal2noise))+geom_line()+
+        ggtitle(mod)+geom_abline(slope = 0,intercept = 0,linetype = 2)
+}
+
+pdf(paste0(opt$figs,"_signal_to_noise_plot.pdf"))
+plots = lapply(models,signal2noise_barplot,my_results)
+u = lapply(plots,print)
+dev.off()
+
 
 rld = rlog(deseq_model1,blind = FALSE)
 
@@ -285,7 +370,7 @@ pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r
 
 K = 1e3
 topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r)#,
+pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
              filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
 
 K = 5e3
