@@ -143,4 +143,17 @@ $(outDr)/scott_MC_diff_genes.tsv:$(dataDr)/*.genes.results
 $(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1.tsv:$(dataDr)/*.genes.results
 	rscripts/perform_differential_expression_contrast_analysis.R --A_noTr '$(dataDr)/RNAseq-Noks-mono-rep?.genes.results' --B_noTr '$(dataDr)/RNAseq-Noks_EBV-mono-rep2.genes.results,$(dataDr)/RNAseq-Noks_EBV-mono-rep3.genes.results,$(dataDr)/RNAseq-Noks_EBV-mono-rep4.genes.results' --A_Tr '$(dataDr)/RNAseq-Noks-MC-rep?.genes.results' --B_Tr '$(dataDr)/RNAseq-Noks_EBV-MC-rep?.genes.results' --cells 'NOK,EBV' --treatments 'none,MC' --outfile $@ --type rsem --figs $(figsDr)/scott_MC_wo_noTr_EBV-NOK_rep1
 
+#############################################################################################################################################################################################
+
+# Meta analysis and related stuff as summary tables
+
+metadir=data/metadata
+
+$(metadir)/PCA_definition.tsv:
+	R CMD BATCH --vanilla rscripts/create_metadata_for_PCA.R
+
+$(metadir)/gene_count_matrix.tsv:$(metadir)/PCA_definition.tsv
+	rscripts/create_counts_matrix.R --metadatafile $^ --outfile $@
+
+
 
