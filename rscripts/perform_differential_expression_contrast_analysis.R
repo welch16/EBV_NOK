@@ -47,11 +47,6 @@ separateFiles <- function(ff)
   }
   ff
 }
-
-## opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
-## opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep?.genes.results"
-## opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
-## opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"
  
 opt$A_noTr = separateFiles(opt$A_noTr)
 opt$B_noTr = separateFiles(opt$B_noTr)
@@ -140,39 +135,42 @@ get_columns <- function(cond,columns)
     columns[out]
 }
 
-signal_to_noise <- function(model,condA,condB,cells,treats)
+signal_to_noise <- function(results,model,condA,condB,cells,treats)
 {
     
     ## Under their model rhe counts for gene i and condition j are distributed
     ## K_ij ~ NegBin(mu_ij , alpha_i)
     ## where mu_ij is the mean and alpha_i is the gene specific dispersion
     ## We define
-    ## signaltonoise_i = [mean_j mu_ij(condA) - mean_j mu_ij(condB)] / 2* alpha_i
+    ## signaltonoise_i = log2FC_i / 2* alpha_i
 
     ## cond1 & cond2 contains the restrictions of the hypothesis test
     ## ',' means 'and'
     ## '_' means 'when'
-   
-    mu = assays(model)[["mu"]]
-    columns = mu %>% colnames
 
-    columnsA = get_columns(condA,columns)
-    columnsB = get_columns(condB,columns)
 
-    muA = rowMeans(mu[,columns %in% columnsA])
-    muB = rowMeans(mu[,columns %in% columnsB])
+    num = results$log2FoldChange
+    
+    ## mu = assays(model)[["mu"]]
+    ## columns = mu %>% colnames
+
+    ## columnsA = get_columns(condA,columns)
+    ## columnsB = get_columns(condB,columns)
+
+    ## muA = rowMeans(mu[,columns %in% columnsA])
+    ## muB = rowMeans(mu[,columns %in% columnsB])
     
     alpha = dispersions(model)
    
-    (log2(muA) - log2(muB)) / (2 * alpha)
+    num / (2 * alpha)
 }
 
 signal2noise = list()
-signal2noise[["full"]] = signal_to_noise(deseq_model1,paste(cells[1],treat[1],sep = ","),
+signal2noise[["full"]] = signal_to_noise(my_results[["full"]],deseq_model1,paste(cells[1],treat[1],sep = ","),
                                          paste(cells[2],treat[2],sep = ","),cells,treat)
 
-signal2noise[["cell"]] = signal_to_noise(deseq_model1,cells[1],cells[2],cells,treat)
-signal2noise[["treat"]] = signal_to_noise(deseq_model1,treat[2],treat[1],cells,treat)
+signal2noise[["cell"]] = signal_to_noise(my_results[["cell"]],deseq_model1,cells[1],cells[2],cells,treat)
+signal2noise[["treat"]] = signal_to_noise(my_results[["treat"]],deseq_model1,treat[2],treat[1],cells,treat)
 
 design(deseq) <- ~ interac
 deseq_model2 = DESeq(deseq, minReplicatesForReplace = Inf)
@@ -197,20 +195,20 @@ my_results[[paste0("cell_",cells[1])]] = results(deseq_model2,
 my_results[[paste0("cell_",cells[2])]] = results(deseq_model2,
     contrast = c("interac",grepv(cells[2],interac[[1]]) %>% rev),cooksCutoff = FALSE)
 
-signal2noise[[paste0("cell_",cells[1])]] = signal_to_noise(deseq_model2,
-    paste(cells[1],treat[2],sep = ","),paste(cells[1],treat[1],sep = ","),cells,treat)
-signal2noise[[paste0("cell_",cells[2])]] = signal_to_noise(deseq_model2,
-    paste(cells[2],treat[2],sep = ","),paste(cells[2],treat[1],sep = ","),cells,treat)
+signal2noise[[paste0("cell_",cells[1])]] = signal_to_noise(my_results[[paste0("cell_",cells[1])]],
+    deseq_model2,paste(cells[1],treat[2],sep = ","),paste(cells[1],treat[1],sep = ","),cells,treat)
+signal2noise[[paste0("cell_",cells[2])]] = signal_to_noise(my_results[[paste0("cell_",cells[2])]],
+    deseq_model2,paste(cells[2],treat[2],sep = ","),paste(cells[2],treat[1],sep = ","),cells,treat)
 
 my_results[[paste0("treat_",treat[1])]] = results(deseq_model2,
-    contrast = c("interac",grepv(treat[1],interac[[1]])), cooksCutoff = FALSE)
+    contrast = c("interac",grepv(treat[1],interac[[1]]) %>% rev), cooksCutoff = FALSE)
 my_results[[paste0("treat_",treat[2])]] = results(deseq_model2,
-    contrast = c("interac",grepv(treat[2],interac[[1]])), cooksCutoff = FALSE)
+    contrast = c("interac",grepv(treat[2],interac[[1]]) %>% rev), cooksCutoff = FALSE)
 
-signal2noise[[paste0("treat_",treat[1])]] = signal_to_noise(deseq_model2,
-    paste(treat[1],cells[1],sep = ","),paste(treat[1],cells[2],sep = ","),cells,treat)
-signal2noise[[paste0("treat_",treat[2])]] = signal_to_noise(deseq_model2,
-    paste(treat[2],cells[1],sep = ","),paste(treat[2],cells[2],sep = ","),cells,treat)
+signal2noise[[paste0("treat_",treat[1])]] = signal_to_noise(my_results[[paste0("treat_",treat[1])]],
+    deseq_model2,paste(treat[1],cells[1],sep = ","),paste(treat[1],cells[2],sep = ","),cells,treat)
+signal2noise[[paste0("treat_",treat[2])]] = signal_to_noise(my_results[[paste0("treat_",treat[2])]],
+    deseq_model2,paste(treat[2],cells[1],sep = ","),paste(treat[2],cells[2],sep = ","),cells,treat)
 
 models = names(my_results)
 
