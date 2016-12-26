@@ -172,5 +172,9 @@ $(metadir)/PCA_definition.tsv:
 $(metadir)/gene_count_matrix.tsv:$(metadir)/PCA_definition.tsv
 	rscripts/create_counts_matrix.R --metadatafile $^ --outfile $@
 
+figsDr=figs/PCA
+
+$(figsDr)/PCA_all_samples.pdf:$(metadir)/PCA_definition.tsv
+	rscripts/create_PCA_plot_with_lab_effect.R --metadatafile $^ --ntop 500 --figsfile $@
 
 
