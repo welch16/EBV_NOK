@@ -14,7 +14,7 @@ optList = list(
 
 opt = parse_args(OptionParser(option_list = optList))
 
-##opt$metadatafile = "data/metadata/PCA_definition.tsv"
+opt$metadatafile = "data/metadata/PCA_definition.tsv"
 
 stopifnot(file.exists(opt$metadatafile))
 
@@ -34,8 +34,6 @@ txdata = tximport(metadata$file,
 
 library(DESeq2,quietly = TRUE)
 
-
-
 deseq = DESeqDataSetFromMatrix(
     round(txdata[["counts"]]),colData = as.data.frame(metadata),
                                design= ~ cell + treatment  + lab)
@@ -53,28 +51,31 @@ rowVars <- function (x,na.rm = TRUE)
 }
 
 
-my_PCA_plot <- function(rl,ntop = 500,x = 1,y = 2)
+my_MDS_plot <- function(rl,ntop = 500,x = 1,y = 2)
 {
-    
+
     rv = rowVars(assay(rl))
 
     select = order(rv, decreasing = TRUE)[seq_len(min(ntop,length(rv)))]
 
-    pca = prcomp(t(assay(rl)[select, ]))
-    percentVar = pca$sdev^2/sum(pca$sdev^2)
+    my_data = t(assay(rl)[select, ])
+
+    my_dist = dist(my_data)
+
+    fit = isoMDS(my_dist,k = max(x,y))
 
     intgroup.df =  as.data.frame(colData(rl)[, ,drop = FALSE]) %>% as.tbl
 
     dt = intgroup.df %>% mutate(file = basename(file)) %>%
-        mutate(x = pca$x[,x], y = pca$x[,y])
+        mutate(x = fit$points[,x], y = fit$points[,y])
 
     dt %>%
         ggplot(aes(x,y,colour = interaction(cell,treatment),shape = lab))+
-        geom_point(size = 2)+coord_fixed()+
-        xlab(paste0("PC",x,": ",round(percentVar[x] * 100), "% variance"))+
-        ylab(paste0("PC",y,": ",round(percentVar[y] * 100), "% variance"))+
+        geom_point(size = 2)+
         scale_color_brewer(palette = "Dark2",name = "Cell.Treatment")+        
         scale_shape_manual(name = "Lab",values = 1:2)+
+        xlab(paste0("Coordinate: ",x))+
+        ylab(paste0("Coordinate: ",y))+        
         geom_label_repel(aes(x,y,label = rep),size = 2,
                          box.padding = unit(.3,"lines"),
                          point.padding = unit(.7,"lines"),
@@ -82,13 +83,14 @@ my_PCA_plot <- function(rl,ntop = 500,x = 1,y = 2)
 
 }
 
+library(MASS)
 
-pdf(opt$figsfile,width = 9 ,height = 9)
+pdf(opt$figsfile)
 plots = list()
-plots[[1]] = my_PCA_plot(rl,opt$ntop,x = 1, y = 2)
-plots[[2]] = my_PCA_plot(rl,opt$ntop,x = 1, y = 3)
-plots[[3]] = my_PCA_plot(rl,opt$ntop,x = 1, y = 4)
-plots[[4]] = my_PCA_plot(rl,opt$ntop,x = 2, y = 3)
-plots[[5]] = my_PCA_plot(rl,opt$ntop,x = 2, y = 4)
+plots[[1]] = my_MDS_plot(rl,opt$ntop,x = 1, y = 2)
+plots[[2]] = my_MDS_plot(rl,opt$ntop,x = 1, y = 3)
+plots[[3]] = my_MDS_plot(rl,opt$ntop,x = 1, y = 4)
+plots[[4]] = my_MDS_plot(rl,opt$ntop,x = 2, y = 3)
+plots[[5]] = my_MDS_plot(rl,opt$ntop,x = 2, y = 4)
 u = lapply(plots,print)
 dev.off()
