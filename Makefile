@@ -38,6 +38,55 @@ data/BW/hg19/%.bw:data/WIG/hg19/%.wig
 
 #############################################################################################################################################################################################
 
+# genome alignment
+hg19idx=$(idxDir)/hg19_bowtie/hg19
+
+data/BAM/hg19/bowtie_genome/%_usual_param.sam:data/FASTQ/%.fastq
+	/p/stat/genomics/bin/bowtie -q -v 2 -m 1 -p $(cores) --best -S $(hg19idx) $^ $@
+
+data/BAM/hg19/bowtie_genome/%_usual_param1.bam:data/BAM/hg19/bowtie_genome/%_usual_param.sam
+	samtools view -bS -o $@ $^ 
+
+data/BAM/hg19/bowtie_genome/%_usual_param.bam:data/BAM/hg19/bowtie_genome/%_usual_param1.bam
+	/p/stat/genomics/bin/bamtools sort -in $^ -out $@
+
+data/BAM/hg19/bowtie_genome/%_rsem_default.sam:data/FASTQ/%.fastq
+	/p/stat/genomics/bin/bowtie -q -n 2 -m 200 -e 99999999 -p $(cores) --best -S $(hg19idx) $^ $@
+
+data/BAM/hg19/bowtie_genome/%_rsem_default1.bam:data/BAM/hg19/bowtie_genome/%_rsem_default.sam
+	samtools view -bS -o $@ $^ 
+
+data/BAM/hg19/bowtie_genome/%_rsem_default.bam:data/BAM/hg19/bowtie_genome/%_rsem_default1.bam
+	/p/stat/genomics/bin/bamtools sort -in $^ -out $@
+
+
+
+
+# dip data
+data/BAM/hg19/bowtie_dip/%.sam:data/FASTQ/DIP/%.fastq
+	/p/stat/genomics/bin/bowtie -q -v 2 -m 1 --best -p $(cores) -S $(hg19idx) $^ $@ 
+
+data/BAM/hg19/bowtie_dip/%.unsorted.bam:data/BAM/hg19/bowtie_dip/%.sam
+	samtools view -bS -o $@ $^
+
+data/BAM/hg19/bowtie_dip/%.sort.bam:data/BAM/hg19/bowtie_dip/%.unsorted.bam
+	/p/stat/genomics/bin/bamtools sort -in $^ -out $@ 
+
+#############################################################################################################################################################################################
+
+# DIP data analysis
+
+## quality control of fastq sequences with fastqc
+
+codedr=/p/stat/genomics/bin
+indir=data/FASTQ/DIP
+outdr=data/quality_control/FASTQC
+
+FASTQC:
+	$(codedr)/fastqc -o $(outdr) $(indir)/*.fastq.gz
+
+#############################################################################################################################################################################################
+
 exploratory_plots:
 	make figs/exploratory/hg19/ben_CaFBS_NOK_vs_EBV.counts_hexbin_plot.pdf &
 	make figs/exploratory/hg19/ben_MC_NOK_vs_EBV.counts_hexbin_plot.pdf &
