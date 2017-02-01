@@ -14,8 +14,6 @@ optList = list(
 
 opt = parse_args(OptionParser(option_list = optList))
 
-opt$logsdir = "manuscript/logs/hg19_MeDIP_bowtie/"
-
 library(readr,quietly = TRUE)
 library(dplyr,quietly = TRUE)
 library(magrittr,quietly = TRUE)
