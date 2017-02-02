@@ -1,0 +1,106 @@
+---
+title: "MeDIP alignment"
+author: "Rene Welch"
+date: "February 1, 2017"
+output:
+  revealjs::revealjs_presentation:
+    theme: simple
+    transition: none
+    self_contained: true
+---
+
+
+```{r setup, include=FALSE}
+ knitr::opts_chunk$set(include = FALSE,echo = FALSE,eval = FALSE)
+ suppressMessages(library(readr,quietly = TRUE))
+ suppressMessages(library(dplyr,quietly = TRUE))
+ suppressMessages(library(tidyr,quietly = TRUE))
+```
+
+## MeDIP-seq
+
+* We renamed the files in a way to make it more similar to the RNAseq files. Instead of
+
+    * <b>RNAseq-akata-noks-CaFBS-rep1</b>, we have something as 
+    * <b>MeDIPseq-NOKS-akata-CaFBS-hmC-rep1</b>.
+
+* We aligned the files with the following instruction:
+
+```
+bowtie -q -v 2 -m 1 --best
+```
+
+which are the parameter we commonly use for <b>ChIP-seq</b>.
+
+```{r load_rates,include=TRUE,echo=FALSE,eval = TRUE}
+
+  suppressMessages(
+  rates <- read_csv("../manuscript/hg19_MeDIP_bowtie.csv") %>% 
+    mutate(mapped_perc = round(mapped_perc * 100,2)) %>% 
+    rename(Total = total,Mapped = mapped,Perc = mapped_perc) %>%
+    mutate(Total = prettyNum(Total,big.mark = ","),
+           Mapped = prettyNum(Mapped,big.mark = ",")) %>%
+    mutate(file = gsub("MeDIPseq-NOKS-","",file)) %>% rename(File = file)
+  )
+    rates1 = rates[1:18,]
+    rates2 = rates[19:36,]
+
+```
+
+
+## MeDIP-seq aligment rates
+
+
+```{r rates2,include=TRUE,echo=FALSE,eval=TRUE}
+
+  DT::datatable(rates,options = list(pageLength = 5))
+
+```
+
+## A more general view 
+
+```{r transform_data,eval = TRUE,include=FALSE}
+
+library(ggplot2)
+library(ggrepel)
+library(scales)
+library(ggthemes)
+
+rates1 = rates1 %>% separate(File , into = c("akata","Treatment","Type","Repl"),sep = "-") %>% mutate(akata = NULL)
+rates2 = rates2 %>% separate(File , into = c("Treatment","Type","Repl"),sep = "-")
+
+clean_rates = bind_rows(
+  rates1 %>% mutate(EBV = "NOKS_EBV"),
+  rates2 %>% mutate(EBV = "EBV") )  %>% 
+  select(EBV,everything()) %>%
+  mutate(Total = as.numeric(gsub(",","",Total)),
+         Mapped = as.numeric(gsub(",","",Mapped)),
+         Type = factor(Type , levels = c("mC","hmC","Input"))) 
+
+```
+
+```{r plot_total_mapped,include=TRUE,eval = TRUE,results='asis'}
+
+  minor = 20
+  major = 22
+  theme_set(theme_bw())
+  clean_rates %>%
+    ggplot(aes(Total,Perc,colour = Type))+geom_point(shape = 0,size = 3)+
+      facet_grid(EBV ~  Treatment)+
+      geom_text_repel(aes(label = Repl),show.legend = FALSE)+
+    theme(legend.position = "top",
+          legend.text = element_text(size = minor,vjust = .5),
+          legend.title = element_text(size = major),
+          axis.text = element_text(size = minor),
+          axis.title = element_text(size = major),
+          strip.text = element_text(size = minor)
+          )+
+    scale_x_log10(
+      breaks = c(10^5,10^6,10^7,10^8),
+      labels = trans_format("log10", math_format(10^.x)))+
+    scale_colour_tableau()+
+    xlab("Amount of sequenced reads")+ylab("Percentage of aligned reads")
+
+```
+
+
