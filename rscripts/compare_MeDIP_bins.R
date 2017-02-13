@@ -65,7 +65,7 @@ create_bins <- function(.)
 bins = sizes %>% split(.$seqnames) %>% map(create_bins) %>%
   as.list %>% GRangesList %>% unlist
 
-
+bins
 
 # 
 # library(ggplot2)
