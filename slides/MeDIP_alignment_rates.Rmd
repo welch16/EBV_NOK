@@ -53,7 +53,7 @@ which are the parameter we commonly use for <b>ChIP-seq</b>.
 
 ```{r rates2,include=TRUE,echo=FALSE,eval=TRUE}
 
-  DT::datatable(rates,options = list(pageLength = 5))
+  DT::datatable(rates,options = list(pageLength = 6))
 
 ```
 
@@ -71,7 +71,7 @@ rates2 = rates2 %>% separate(File , into = c("Treatment","Type","Repl"),sep = "-
 
 clean_rates = bind_rows(
   rates1 %>% mutate(EBV = "NOKS_EBV"),
-  rates2 %>% mutate(EBV = "EBV") )  %>% 
+  rates2 %>% mutate(EBV = "NOKS") )  %>% 
   select(EBV,everything()) %>%
   mutate(Total = as.numeric(gsub(",","",Total)),
          Mapped = as.numeric(gsub(",","",Mapped)),
@@ -99,7 +99,8 @@ clean_rates = bind_rows(
       breaks = c(10^5,10^6,10^7,10^8),
       labels = trans_format("log10", math_format(10^.x)))+
     scale_colour_tableau()+
-    xlab("Amount of sequenced reads")+ylab("Percentage of aligned reads")
+    xlab("Amount of sequenced reads")+ylab("Percentage of aligned reads")+
+    ylim(70,90)
 
 ```
 
