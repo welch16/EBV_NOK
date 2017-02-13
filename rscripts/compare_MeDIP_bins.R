@@ -46,12 +46,13 @@ options(cores = opt$cores)
 files = separateFiles(opt$samples)
 
 if(is.null(opt$sample_names)){
-  opt$sample_names = paste("Sample",seq_along(files) , sep = "-")
+  opt$sample_names = paste0("Sample",seq_along(files) )
 }
 
 reads = files %>% mclapply(readGAlignments,param = NULL) %>% mclapply(as,"GRanges")
+names(reads) opt$sample_names
 
-sizes = read_delim(opt$size_files,delim ="\t",col_names = c("seqnames","coord"))
+sizes = read_delim(opt$size_files,delim ="\t",col_names = c("seqnames","size"))
 
 create_bins <- function(.)
 {
@@ -64,6 +65,11 @@ create_bins <- function(.)
 
 bins = sizes %>% split(.$seqnames) %>% map(create_bins) %>%
   as.list %>% GRangesList %>% unlist
+names(bins) = NULL
+
+reads = reads %>% mclapply(resize,opt$frag_len)
+
+bin_counts = reads %>% mclapply(function(x)countOverlaps(bins,x)) %>% as.tbl
 
 
 # 
