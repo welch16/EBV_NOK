@@ -243,13 +243,15 @@ binSize=200
 log=TRUE
 sizeFile=/p/keles/SOFTWARE/hg19.chrom.sizes
 
-DIP_step1:
+DIP_step1_mono:
 	make NOKS_mono_Input & 
 	make NOKS_mono_mc   &
 	make NOKS_mono_hmc &
 	make NOKS_akata_mono_Input & 
 	make NOKS_akata_mono_mc  &
 	make NOKS_akata_mono_hmc &
+
+DIP_step1_CaFBS:
 	make NOKS_CaFBS_Input & 
 	make NOKS_CaFBS_mc  &
 	make NOKS_CaFBS_hmc &
@@ -270,10 +272,10 @@ NOKS_akata_mono_Input:$(dataDr)/*sort*
 	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-akata-mono-Input-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-NOKS-akata-mono-Input --use_log $(log) --cores 2
 
 NOKS_akata_mono_mc:$(dataDr)/*sort*
-	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-akata-NOKS-mono-mC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-mono-mc --use_log $(log) --cores 2
+	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-akata-mono-mC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-mono-mc --use_log $(log) --cores 2
 
 NOKS_akata_mono_hmc:$(dataDr)/*sort*
-	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-akata-NOKS-mono-hmC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-mono-hmc --use_log $(log) --cores 2
+	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-akata-mono-hmC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-mono-hmc --use_log $(log) --cores 2
 
 NOKS_CaFBS_Input:$(dataDr)/*sort*
 	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-CaFBS-Input-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-NOKS-CaFBS-Input --use_log $(log) --cores 2
@@ -288,10 +290,10 @@ NOKS_akata_CaFBS_Input:$(dataDr)/*sort*
 	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-akata-CaFBS-Input-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-NOKS-akata-CaFBS-Input --use_log $(log) --cores 2
 
 NOKS_akata_CaFBS_mc:$(dataDr)/*sort*
-	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-akata-NOKS-CaFBS-mC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-CaFBS-mc --use_log $(log) --cores 2
+	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-akata-CaFBS-mC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-CaFBS-mc --use_log $(log) --cores 2
 
 NOKS_akata_CaFBS_hmc:$(dataDr)/*sort*
-	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-akata-NOKS-CaFBS-hmC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-CaFBS-hmc --use_log $(log) --cores 2
+	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-akata-CaFBS-hmC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-CaFBS-hmc --use_log $(log) --cores 2
 
 
 
