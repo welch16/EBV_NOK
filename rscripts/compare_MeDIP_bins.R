@@ -38,13 +38,14 @@ source("rfuns/MeDIP_analysis.R")
 
 ## opt$samples = "data/BAM/hg19/bowtie_dip/MeDIPseq-NOKS-akata-mono-Input-rep?.sort.bam"
 ## opt$size_file = "/p/keles/SOFTWARE/hg19.chrom.sizes"
-## opt$samples = separateFiles(opt$samples)
 
-opt$sample_names = paste0(
-    paste0("Input",seq_len(length(files))),collapse = ",")
+opt$samples = separateFiles(opt$samples)
+
+## opt$sample_names = paste0(
+##     paste0("Input",seq_len(length(files))),collapse = ",")
 
 if(is.null(opt$sample_names)){
-    opt$sample_names = paste0("Sample",seq_along(files) )
+    opt$sample_names = paste0("Replicate",seq_along(opt$samples) )
 }else{
     opt$sample_names = strsplit(opt$sample_names,",") %>% unlist
 
@@ -66,7 +67,7 @@ bin_counts = reads %>% mclapply(function(x)countOverlaps(bins,x)) %>%
 
 if(opt$use_log){
     bin_counts = bin_counts %>%
-        mutate_all(funs(log(1 + . )))
+        mutate_all(funs(log10(1 + . )))
 }
   
 N = ncol(bin_counts)
@@ -89,7 +90,7 @@ for(i in seq_len(N-1)){
     }
 }
 
-pdf(paste0(opt$figs,"_binsize",opt$bin_size,"_fraglen",opt$frag_len,".pdf")          
+pdf(paste0(opt$figs,"_binsize",opt$bin_size,"_fraglen",opt$frag_len,".pdf"))
 u = plots %>% lapply(print)
 dev.off()
 
