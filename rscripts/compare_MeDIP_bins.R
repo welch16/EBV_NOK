@@ -50,7 +50,7 @@ if(is.null(opt$sample_names)){
 }
 
 reads = files %>% mclapply(readGAlignments,param = NULL) %>% mclapply(as,"GRanges")
-names(reads) opt$sample_names
+names(reads) = opt$sample_names
 
 sizes = read_delim(opt$size_files,delim ="\t",col_names = c("seqnames","size"))
 
@@ -69,8 +69,10 @@ names(bins) = NULL
 
 reads = reads %>% mclapply(resize,opt$frag_len)
 
-bin_counts = reads %>% mclapply(function(x)countOverlaps(bins,x)) %>% as.tbl
+bin_counts = reads %>% mclapply(function(x)countOverlaps(bins,x)) %>%
+  as.data.frame  %>% as.tbl
 
+names(bin_counts) = opt$sample_names
 
 # 
 # library(ggplot2)
