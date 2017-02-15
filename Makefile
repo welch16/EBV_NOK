@@ -231,7 +231,6 @@ $(figsDr)/MDS_all_samples.pdf:$(metadir)/PCA_definition.tsv
 
 #############################################################################################################################################################################################
 
-
 # DIP-analysis
 
 ### First step, compare for each treatment block: All Inputs, All mc and all hmc
@@ -258,6 +257,9 @@ DIP_step1_CaFBS:
 	make NOKS_akata_CaFBS_Input & 
 	make NOKS_akata_CaFBS_mc  &
 	make NOKS_akata_CaFBS_hmc  &
+
+data/bins/MeDIPseq/BinMatrix_binsize$(binSize)_fragLen$(fragLen).tsv:data/metadata/MeDIPseq_definition.tsv
+	rscripts/create_bin_matrix.R --design_file $^ --bin_size $(binSize) --frag_len $(fragLen) --size_file /p/keles/SOFTWARE/hg19.chrom.sizes --outfile $@ --cores 12
 
 NOKS_mono_Input:$(dataDr)/*sort*
 	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-mono-Input-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-NOKS-mono-Input --use_log $(log) --cores 2
