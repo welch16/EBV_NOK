@@ -261,6 +261,11 @@ DIP_step1_CaFBS:
 data/bins/MeDIPseq/BinMatrix_binsize$(binSize)_fragLen$(fragLen).tsv:data/metadata/MeDIPseq_definition.tsv
 	rscripts/create_bin_matrix.R --design_file $^ --bin_size $(binSize) --frag_len $(fragLen) --size_file /p/keles/SOFTWARE/hg19.chrom.sizes --outfile $@ --cores 12
 
+data/bins/MeDIPseq/BinMatrix_binsize$(binSize)_fragLen$(fragLen)_InputPooled.tsv:data/metadata/MeDIPseq_definition_InputPooled.tsv
+	rscripts/create_bin_matrix.R --design_file $^ --bin_size $(binSize) --frag_len $(fragLen) --size_file /p/keles/SOFTWARE/hg19.chrom.sizes --outfile $@ --cores 12
+
+
+
 NOKS_mono_Input:$(dataDr)/*sort*
 	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-mono-Input-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-NOKS-mono-Input --use_log $(log) --cores 2
 
