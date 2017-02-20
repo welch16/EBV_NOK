@@ -44,10 +44,7 @@ options(mc.cores = opt$cores)
 ## opt$read_dir = "data/BAM/hg19/bowtie_dip"
 
 bin_matrix = read_tsv(opt$bindata_file)
-
-
 characteristics = strsplit(opt$peak_sample,"_")[[1]]
-
 samples = bin_matrix %>% colnames
 
 
@@ -155,6 +152,8 @@ dev.off()
 
 source("rfuns/MeDIP_analysis.R")
 
+library(ggplot2,quietly = TRUE)
+
 theme_set(theme_bw())
 
 df = df %>% mutate_all(funs(log10(1  +. )))
@@ -163,7 +162,7 @@ pdf(paste0(opt$figs,"_hexbin_Input_vs_ChIP.pdf"))
 hexbin_scatter_plot(df,"input","chip")+coord_fixed() + ggtitle( chip %>% colnames)
 dev.off()
 
-peaks = mosaicsPeak( fit, signalModel="2S", FDR= opt$fdr,
+peaks = mosaicsPeak( fit, signalModel="2S", FDR= opt$fdr / 100,
                         maxgap= opt$maxgap, thres= opt$thresh )
 
 peaks = print(peaks) %>% as.tbl
