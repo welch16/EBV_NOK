@@ -237,8 +237,8 @@ $(figsDr)/MDS_all_samples.pdf:$(metadir)/PCA_definition.tsv
 
 dataDr=data/BAM/hg19/bowtie_dip
 figsDr=figs/methylation/correlation
-fragLen=200
-binSize=200
+##fragLen=200
+##binSize=200
 log=TRUE
 sizeFile=/p/keles/SOFTWARE/hg19.chrom.sizes
 
@@ -264,6 +264,46 @@ data/bins/MeDIPseq/BinMatrix_binsize$(binSize)_fragLen$(fragLen).tsv:data/metada
 data/bins/MeDIPseq/BinMatrix_binsize$(binSize)_fragLen$(fragLen)_InputPooled.tsv:data/metadata/MeDIPseq_definition_InputPooled.tsv
 	rscripts/create_bin_matrix.R --design_file $^ --bin_size $(binSize) --frag_len $(fragLen) --size_file /p/keles/SOFTWARE/hg19.chrom.sizes --outfile $@ --cores 12
 
+#############################################################################################################################################################################################
+
+figsDr=./figs/methylation/peaks
+binMat=./data/bins/MeDIPseq/BinMatrix_binsize200_fragLen200_InputPooled.tsv
+peakDir=./data/peaks/hg19/MeDIPseq
+
+call_peaks_EBV_CaFBS:$(binMat)
+	make binSize=200 fragLen=200 peakSample='EBV_CaFBS_hmC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_CaFBS_hmC_Rep1_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_CaFBS_hmC_Rep2' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_CaFBS_hmC_Rep2_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_CaFBS_hmC_Rep3' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_CaFBS_hmC_Rep3_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_CaFBS_mC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_CaFBS_mC_Rep1_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_CaFBS_mC_Rep2' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_CaFBS_mC_Rep2_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_CaFBS_mC_Rep3' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_CaFBS_mC_Rep3_binsize200_fragLen200_FDR5.tsv
+
+call_peaks_EBV_mono:$(binMat)
+	make binSize=200 fragLen=200 peakSample='EBV_mono_hmC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_mono_hmC_Rep1_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_mono_hmC_Rep2' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_mono_hmC_Rep2_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_mono_hmC_Rep3' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_mono_hmC_Rep3_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_mono_mC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_mono_mC_Rep1_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_mono_mC_Rep2' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_mono_mC_Rep2_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='EBV_mono_mC_Rep3' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_EBV_mono_mC_Rep3_binsize200_fragLen200_FDR5.tsv
+
+call_peaks_NOK_CaFBS:$(binMat)
+	make binSize=200 fragLen=200 peakSample='NOK_CaFBS_hmC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_hmC_Rep1_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_CaFBS_hmC_Rep2' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_hmC_Rep2_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_CaFBS_hmC_Rep3' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_hmC_Rep3_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_CaFBS_mC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_mC_Rep1_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_CaFBS_mC_Rep2' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_mC_Rep2_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_CaFBS_mC_Rep3' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_mC_Rep3_binsize200_fragLen200_FDR5.tsv
+
+call_peaks_NOK_mono:$(binMat)
+	make binSize=200 fragLen=200 peakSample='NOK_mono_hmC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_hmC_Rep1_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_mono_hmC_Rep2' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_hmC_Rep2_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_mono_hmC_Rep3' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_hmC_Rep3_binsize200_fragLen200_FDR5.tsv
+	make binSize=200 fragLen=200 peakSample='NOK_mono_mC_Rep1' fdr=5 ./data/peaks/hg19/MeDIPseq/Peaks_NOK_CaFBS_mC_Rep1_binsize200_fragLen200_FDR5.tsv
+
+$(peakDir)/Peaks_$(peakSample)_binsize$(binSize)_fragLen$(fragLen)_FDR$(fdr).tsv:$(binMat)
+	rscripts/MOSAiCS_call_MeDIPseq_peaks.R --bindata_file $^ --peakfile $@  --peak_sample $(peakSample) --read_dir $(dataDr) --fdr $(fdr) --figs $(figsDr)/$(peakSample) --cores 20
+
+#############################################################################################################################################################################################
 
 
 NOKS_mono_Input:$(dataDr)/*sort*
@@ -301,10 +341,6 @@ NOKS_akata_CaFBS_mc:$(dataDr)/*sort*
 
 NOKS_akata_CaFBS_hmc:$(dataDr)/*sort*
 	./rscripts/compare_MeDIP_bins.R --samples '$(dataDr)/MeDIPseq-NOKS-akata-CaFBS-hmC-rep?.sort.bam' --bin_size $(binSize) --frag_len $(fragLen) --size_file $(sizeFile) --figs $(figsDr)/MeDIPseq-akata-NOKS-CaFBS-hmc --use_log $(log) --cores 2
-
-
-
-
 
 
 #############################################################################################################################################################################################
