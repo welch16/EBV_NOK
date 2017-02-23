@@ -1,4 +1,3 @@
-
 clean:
 	find . -type f -name '*~' -delete
 	find . -type f -name '.*~' -delete
@@ -237,8 +236,6 @@ $(figsDr)/MDS_all_samples.pdf:$(metadir)/PCA_definition.tsv
 
 dataDr=data/BAM/hg19/bowtie_dip
 figsDr=figs/methylation/correlation
-##fragLen=200
-##binSize=200
 log=TRUE
 sizeFile=/p/keles/SOFTWARE/hg19.chrom.sizes
 
@@ -257,6 +254,9 @@ DIP_step1_CaFBS:
 	make NOKS_akata_CaFBS_Input & 
 	make NOKS_akata_CaFBS_mc  &
 	make NOKS_akata_CaFBS_hmc  &
+
+data/quality_control/MEDIPS/%_medips.tsv:$(dataDr)/%.sort.bam
+	rscripts/MEDIPS_QC_metrics.R --readsfile $^ --outfile $@ --shift 0 --extend 200 --window_size 200 --figs ./figs/methylation/medips/$(@F:_medips.tsv=) --cores 12
 
 data/bins/MeDIPseq/BinMatrix_binsize$(binSize)_fragLen$(fragLen).tsv:data/metadata/MeDIPseq_definition.tsv
 	rscripts/create_bin_matrix.R --design_file $^ --bin_size $(binSize) --frag_len $(fragLen) --size_file /p/keles/SOFTWARE/hg19.chrom.sizes --outfile $@ --cores 12
