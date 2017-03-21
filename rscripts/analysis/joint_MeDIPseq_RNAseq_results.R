@@ -37,6 +37,8 @@ rd <- with(bm,
 rd = as(rd,"GRanges")
 seqlevels(rd) = paste0("chr",seqlevels(rd))
 
+rd = promoters(rd)
+
 ## DESeq2 results
 
 deseqdr = "data/Diff.Genes/hg19/DESeq2_contrasts"
@@ -161,19 +163,22 @@ expt_counts[["NOKS"]] = matrixStats::rowWeightedMeans(dipmat,w = ifelse(!grepl("
 expt_counts[["EBV_Input"]] = matrixStats::rowWeightedMeans(inputmat,w = ifelse(grepl("akata",names(w2)),w2,0))
 expt_counts[["NOKS_Input"]] = matrixStats::rowWeightedMeans(inputmat,w = ifelse(!grepl("akata",names(w2)),w2,0))
 
-
-
 mcols(rd) = cbind(mcols(rd),DataFrame(width = width(rd)),DataFrame(expt_counts))
-
-
 
 auxrd = rd %>% mcols %>% as.data.frame %>% as.tbl %>% dplyr::rename(ensembl = ensembl_gene_id) %>%
     mutate(cpg = NULL)
 
+
+
 diffgenes = diffgenes %>% left_join(auxrd,by = "ensembl")
+
 
 diffgenes = diffgenes %>% mutate(DIP_log2FC =log2( NOKS / EBV),
                                  DIPInput_log2FC = log2(NOKS_Input / EBV_Input))
+
+
+
+
 
 
 geneExpression_count_plot <- function(DT,xvar,yvar,sc)
@@ -193,24 +198,26 @@ geneExpression_count_plot <- function(DT,xvar,yvar,sc)
 }
 
 
+library(ggplot2)
+
 theme_set(theme_bw()+theme(legend.position = "top"))
 
-x11(width = 10,height = 10)
-
+pdf(width = 10,height = 10)
 diffgenes %>% filter(!is.na(cpg) & !is.na(padj)) %>%
     ggplot(aes(log2FC,DIPInput_log2FC,colour = padj <= 1e-3))+
     geom_point(alpha = I(1/3))+ylim(-2,2)+xlim(-10,10)+
     geom_smooth(method = "lm",se =FALSE,colour = "orange")+
     facet_grid(model ~ cpg)+
     scale_color_manual(values = c("navyblue","red"))
-
-
 diffgenes %>% filter(!is.na(cpg) & !is.na(padj)) %>%
     ggplot(aes(log2FC,DIP_log2FC,colour = padj <= 1e-3))+
     geom_point(alpha = I(1/3))+ylim(-2,2)+xlim(-10,10)+
     geom_smooth(method = "lm",se =FALSE,colour = "orange")+
     facet_grid(model ~ cpg)+
     scale_color_manual(values = c("navyblue","red"))
+
+dev.off()
+
 
 write_tsv(diffgenes,path = "data/integration_RNAseq_MeDIPseq.tsv")
 
