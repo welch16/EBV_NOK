@@ -1,6 +1,10 @@
 
 rm(list = ls())
 
+library(tidyverse)
+library(rtracklayer)
+
+
 library(dplyr)
 library(purrr)
 library(tidyr)
@@ -37,7 +41,7 @@ rd <- with(bm,
 rd = as(rd,"GRanges")
 seqlevels(rd) = paste0("chr",seqlevels(rd))
 
-rd = promoters(rd)
+rd = promoters(rd,upstream = 1e3,downstream = 500)
 
 ## DESeq2 results
 
@@ -215,7 +219,6 @@ diffgenes %>% filter(!is.na(cpg) & !is.na(padj)) %>%
     geom_smooth(method = "lm",se =FALSE,colour = "orange")+
     facet_grid(model ~ cpg)+
     scale_color_manual(values = c("navyblue","red"))
-
 dev.off()
 
 
