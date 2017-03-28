@@ -3,56 +3,18 @@ rm(list = ls())
 
 library(tidyverse)
 library(rtracklayer)
+library(BiocParallel)
 
+bp = MulticoreParam(workers = 10,bpprogressbar = TRUE)
 
-library(dplyr)
-library(purrr)
-library(tidyr)
-library(magrittr)
-library(readr)
-
-library(tximport)
-library(GenomicRanges)
-library(GenomicAlignments)
-library(rtracklayer)
-library(IRanges)
-library(biomaRt)
-
-library(parallel)
-options(mc.cores = 12)
-
-genedr = "data/RSEM/hg19"
-genefiles = list.files(genedr,full.names = TRUE,pattern = "genes.results")
-    
-## CpG islands
-session =  browserSession()
-genome(session) = "hg19"
-cpg = session[["CpG Islands"]]
-
-## Gene name - positions
-mart <- useMart('ensembl', 'hsapiens_gene_ensembl')
-attr <- c("chromosome_name", "start_position", "end_position",
-          "ensembl_gene_id")
-bm <- getBM(attr, "chromosome_name", c(as.character(1:22),"X","Y"), mart)
-rd <- with(bm,
-           RangedData(IRanges(start_position, end_position),
-                      space=chromosome_name, ensembl_gene_id))
-
-rd = as(rd,"GRanges")
-seqlevels(rd) = paste0("chr",seqlevels(rd))
-
-rd = promoters(rd,upstream = 1e3,downstream = 500)
-
-## DESeq2 results
-
+## load DeSeq2 results
 deseqdr = "data/Diff.Genes/hg19/DESeq2_contrasts"
-deseqfiles = list.files(deseqdr,full.names = TRUE,pattern = "ben")
+deseqfiles = list.files(deseqdr,full.names = TRUE)
 
-results = lapply(deseqfiles,read_tsv)
-
+deseqresults = lapply(deseqfiles,read_tsv)
 
 ## D.E. genes by cell
-diffgenes = results %>%
+diffgenes = deseqresults %>%
     lapply(
         function(x){
             out = x %>% dplyr::select(gene,dplyr::contains("cell:"))
@@ -60,9 +22,44 @@ diffgenes = results %>%
             out
         })
 
+## load DIP-seq count matrix
+dipdr = "data/MeDIPseq_results"
+dipmat = read_tsv(file.path(dipdr,"MeDIPseq_PromotersCounts_upstr500_downstr1000fraglen300.tsv"))
 
-diffgenes = mapply(function(x,y)x %>% mutate(model = y),diffgenes,c("noneVsCaFBS","noneVsMC"),SIMPLIFY = FALSE) %>%
-    bind_rows
+## load RSEM TPM matrix
+dr = "data/metadata"
+rsemfile = list.files(dr,full.names = TRUE,pattern = "TPM")
+tpmmat = read_tsv(rsemfile)
+
+## load CpG islands from UCSC genome browser
+session =  browserSession()
+genome(session) = "hg19"
+cpg = session[["CpG Islands"]]
+
+cpgmat = cpg %>% as.data.frame %>% as.tbl %>%
+    mutate(strand = NULL) %>% select(name,everything()) %>%
+    filter(!grepl("random",seqnames))
+write_tsv(cpgmat,"data/metadata/UCSC_genomeBrowser_CpGislands_hg19.tsv")
+
+cpgmat = read_tsv("data/metadata/UCSC_genomeBrowser_CpGislands_hg19.tsv")
+
+## obtain nr of aligned reads in each of the MeDIP-seq files
+bamfiles = list.files("data/BAM/hg19/bowtie_dip/",
+                      pattern = "sort",full.names = TRUE) %>%
+    .[grep("bai",.,invert= TRUE)]
+
+## dipdepths = bamfiles %>% map(Rsamtools::countBam) %>% map_int(.f = function(.).$records)
+
+dipdepths = tibble(file = basename(bamfiles),depth = dipdepths)
+
+
+write_tsv(dipdepths,
+          "data/metadata/MeDIPseq_sequencingDepth.tsv")
+
+dipdepths = read_tsv("data/metadata/MeDIPseq_sequencingDepth.tsv")
+
+
+
 
 ## overlap with CpG islands
 
