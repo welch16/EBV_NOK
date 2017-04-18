@@ -210,6 +210,40 @@ $(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1.tsv:$(dataDr)/*.genes.results
 
 #############################################################################################################################################################################################
 
+dataDr=data/RSEM/hg19
+outDr=data/Diff.Genes/hg19/DESeq2_marginal
+figsDr=figs/diff_expression/DESeq2_marginal
+
+DESeq2_marginal_diff_expression:
+	make $(outDr)/ben_CaFBS_diff_genes_NOKS.tsv & 
+	make $(outDr)/ben_CaFBS_diff_genes_EBV.tsv & 
+	make $(outDr)/ben_MC_diff_genes_NOKS.tsv &
+	make $(outDr)/ben_MC_diff_genes_EBV.tsv &
+	make $(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1_NOKS.tsv &
+	make $(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1_EBV.tsv &
+
+$(outDr)/ben_CaFBS_diff_genes_NOKS.tsv:$(dataDr)/*.genes.results
+	rscripts/perform_differential_expression_marginal_contrasts.R --mono_files 'data/RSEM/hg19/RNAseq-noks-no_treatment-rep?.genes.results' --treat_files 'data/RSEM/hg19/RNAseq-noks-CaFBS-rep?.genes.results' --treatment 'none,CaFBS' --outfile $@ --type rsem --figs figs/diff_expression/DESeq2_marginal/ben_CaFBS_NOKS --plot_title 'Ben NOKS: CaFBS vs. mono'
+
+$(outDr)/ben_CaFBS_diff_genes_EBV.tsv:$(dataDr)/*.genes.results
+	rscripts/perform_differential_expression_marginal_contrasts.R --mono_files 'data/RSEM/hg19/RNAseq-akata-noks-no_treatment-rep?.genes.results' --treat_files 'data/RSEM/hg19/RNAseq-akata-noks-CaFBS-rep?.genes.results' --treatment 'none,MC' --outfile $@ --type rsem --figs $(figsDr)/ben_CaFBS_EBV --plot_title 'Ben EBV: CaFBS vs. mono'
+
+
+$(outDr)/ben_MC_diff_genes_NOKS.tsv:$(dataDr)/*.genes.results
+	rscripts/perform_differential_expression_marginal_contrasts.R --mono_files 'data/RSEM/hg19/RNAseq-noks-no_treatment-rep?.genes.results' --treat_files 'data/RSEM/hg19/RNAseq-noks-methyl_cell-rep?.genes.results' --treatment 'none,MC' --outfile $@ --type rsem --figs figs/diff_expression/DESeq2_marginal/ben_MC_NOKS --plot_title 'Ben NOKS: MC vs. mono'
+
+$(outDr)/ben_MC_diff_genes_EBV.tsv:$(dataDr)/*.genes.results
+	rscripts/perform_differential_expression_marginal_contrasts.R --mono_files 'data/RSEM/hg19/RNAseq-akata-noks-no_treatment-rep?.genes.results' --treat_file 'data/RSEM/hg19/RNAseq-akata-noks-methyl_cell-rep?.genes.results' --treatment 'none,MC' --outfile $@ --type rsem --figs figs/diff_expression/DESeq2_marginal/ben_MC_EBV --plot_title 'Ben EBV: MC vs. mono'
+
+$(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1_NOKS.tsv:$(dataDr)/*.genes.results
+	rscripts/perform_differential_expression_marginal_contrasts.R --mono_files 'data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results' --treat_files 'data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results' --treatment 'none,MC' --outfile $@ --type rsem --figs figs/diff_expression/DESeq2_marginal/scott_MC_wo_noTr_EBV-NOK_rep1_NOKS --plot_title 'Scott NOKS: MC vs. mono'
+
+$(outDr)/scott_MC_diff_genes_wo_noTr_EBV-NOK_rep1_EBV.tsv:$(dataDr)/*.genes.results
+	rscripts/perform_differential_expression_marginal_contrasts.R --mono_files 'data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results' --treat_files 'data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results' --treatment 'none,MC' --outfile $@ --type rsem --figs figs/diff_expression/DESeq2_marginal/scott_MC_wo_noTr_EBV-NOK_rep1_EBV --plot_title 'Scott EBV: MC vs. mono'
+
+
+#############################################################################################################################################################################################
+
 # Meta analysis and related stuff as summary tables
 
 metadir=data/metadata
