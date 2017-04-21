@@ -5,7 +5,7 @@ library(optparse,quietly = TRUE)
 optList = list(
     make_option("--bamfile",action = "store_true",type = "character",
                 help = "Name of the BAM file to convert to wig"),
-    make_option("--fraglen",action = "store_true",type = "numeric",default = 300,
+    make_option("--fraglen",action = "store_true",type = "numeric",
                 help = "Fragment length used to extend the aligned reads in the BAM file"),
     make_option("--bigwigfile",action = "store_true",
                 type = "character",
@@ -28,7 +28,9 @@ lvs = seqlevelsInUse(reads)
 seqlevels(reads,force = TRUE) = lvs[lvs != "chrM"]
 
 ## resizing reads by fraglen and normalizing the coverage
-reads = resize(reads ,opt$fraglen)
+if(!is.null(opt$fraglen)){
+    reads = resize(reads ,opt$fraglen)
+}    
 nreads = length(reads)
 cover = coverage(reads)
 normFactor = 1e9 / nreads
