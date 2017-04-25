@@ -204,8 +204,24 @@ hmC_deseqResults_list = hmC_deseqResults_list %>% map(.f = function(x)
     x %>% left_join( tpmmat[,1:2],by = "ensembl") %>%
     select(ensembl,gene,everything()))
 
+
 save(mC_deseqResults_list,file = "data/MeDIPseq_results/DESeq2_diffMethyl_MC.RData")
 save(hmC_deseqResults_list,file = "data/MeDIPseq_results/DESeq2_diffMethyl_HMC.RData")
+
+outdr = "data/MeDIPseq_results"
+
+mC_deseqResults_list %>% map2(names(mC_deseqResults_list),
+                              .f = function(x,y){
+                                  write_tsv(x,
+                                            path = file.path(outdr,
+                                                             paste0(y,"_diffMethyl_mC.tsv")))})
+ 
+hmC_deseqResults_list %>% map2(names(hmC_deseqResults_list),
+                              .f = function(x,y){
+                                  write_tsv(x,
+                                            path = file.path(outdr,
+                                                             paste0(y,"_diffMethyl_hmC.tsv")))})
+
 
 
 rld_mC = mC_deseqModel_list %>% map(rlog,blind = FALSE)
