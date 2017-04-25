@@ -21,58 +21,29 @@ library(ChIPpeakAnno)
 
 ## Get gene positions for all ensembl genes in hg19
 ensembl = useMart(biomart = "ENSEMBL_MART_ENSEMBL",dataset = "hsapiens_gene_ensembl")
-tss = getAnnotation(ensembl,featureType = "TSS")
-tss$ensembl_gene_id = names(tss)
-
-seqlevels(tss) = paste0("chr",seqlevels(tss))
-seqlevels(tss,force = TRUE) = paste0("chr",c(seq_len(22),"X","Y"))
-
-## attr <- c("chromosome_name", "start_position", "end_position",
-##           "ensembl_gene_id")
-
-## bm <- getBM(attr, "chromosome_name", c(as.character(1:22),"X","Y"), ensembl)
-## rd <- with(bm,
-##            RangedData(IRanges(start_position, end_position),
-##                       space=chromosome_name, ensembl_gene_id))
-## rd = rd %>% as("GRanges")
-
-## seqlevels(rd) = paste0("chr",seqlevels(rd))
-
-## Building the MM10 annotations
 
 
-## ensembl = useMart("ensembl", dataset="hsapiens_gene_ensembl")
-##                                         # listFilters(ensembl)
-##                                         # listAttributes(ensembl)
+attr = c("chromosome_name", "start_position", "end_position",
+          "ensembl_gene_id","external_gene_name","strand")
+
+bm = getBM(attr, "chromosome_name", c(as.character(1:22),"X","Y"), ensembl)
 
 
-## attr = c("chromosome_name","transcript_start","transcript_end","transcription_start_site",
-##          "ensembl_transcript_id","ensembl_gene_id","strand","start_position",
-##          "end_position")
+rd = with(bm,
+          RangedData(IRanges(start_position, end_position),
+                     space=chromosome_name, ensembl_gene_id,gene = external_gene_name,strand))
+rd = rd %>% as("GRanges")
 
-## bm = getBM(attr,"chromosome_name",c(as.character(1:22),"X","Y"),ensembl)
-
-## tss = with(bm,
-##            RangedData(IRanges(start = transcription_start_site,width = 1),
-##                       space=chromosome_name,
-##                       transcript_start,
-##                       transcript_end,
-##                       ensembl_transcript_id,
-##                       ensembl_gene_id,
-##                       strand,
-##                       start_position,
-##                       end_position))
-
-## tss = tss %>% as("GRanges")
-## seqlevels(tss) = paste0("chr",seqlevels(tss))
-
+seqlevels(rd) = paste0("chr",seqlevels(rd))
+seqlevels(rd,force = TRUE) = paste0("chr",c(seq_len(22),"X","Y"))
 
 ## define promoters according to Grimm et al, 2012
 upstream = 500
 downstream = 1000
 fraglen = 300
 
-promoters = promoters(tss, upstream,downstream)
+promoters = promoters(rd, upstream,downstream)
+
 
 sizes = read_tsv("/p/keles/SOFTWARE/hg19.chrom.sizes",col_names= FALSE)
 genome = GRanges(seqnames = sizes$X1,
@@ -139,26 +110,3 @@ write_tsv(count_matrix,
                            paste0("MeDIPseq_PromotersCounts_upstr",upstream,
                                   "_downstr",downstream,"fraglen",fraglen,".tsv")))
     
-
-
-## library(ChIPpeakAnno)
-## library(biomaRt)
-## library(org.Mm.eg.db)
-
-## ## For mouse annotations. look into the vignette('ChIPpeakAnno') for human and other org
-## ## This is MM9 referecne genome
-##                                         # data(TSS.mouse.NCBIM37)
-
-## ## Building the MM10 annotations
-## library(biomaRt)
-##                                         # ensembl=useMart("ensembl")
-##                                         # listDatasets(ensembl)
-## ensembl = useMart("ensembl", dataset="mmusculus_gene_ensembl")
-##                                         # listFilters(ensembl)
-##                                         # listAttributes(ensembl)
-## TSS.mouse.GRCm38 <- getAnnotation(ensembl, featureType = "TSS")
-
-## annotatedPromoters <- annotatePeakInBatch(prom, AnnotationData=TSS.mouse.GRCm38, output="both")
-
-## ## look at the results
-## head(annotatedPromoters)
