@@ -20,29 +20,18 @@ library(ChIPpeakAnno)
 
 
 ## Get gene positions for all ensembl genes in hg19
-ensembl = useMart(biomart = "ENSEMBL_MART_ENSEMBL",dataset = "hsapiens_gene_ensembl")
 
-
-attr = c("chromosome_name", "start_position", "end_position",
-          "ensembl_gene_id","external_gene_name","strand")
-
-bm = getBM(attr, "chromosome_name", c(as.character(1:22),"X","Y"), ensembl)
-
-
-rd = with(bm,
-          RangedData(IRanges(start_position, end_position),
-                     space=chromosome_name, ensembl_gene_id,gene = external_gene_name,strand))
-rd = rd %>% as("GRanges")
-
-seqlevels(rd) = paste0("chr",seqlevels(rd))
-seqlevels(rd,force = TRUE) = paste0("chr",c(seq_len(22),"X","Y"))
+data("TSS.human.GRCh37")
+tss = TSS.human.GRCh37
+seqlevels(tss) = paste0("chr",seqlevels(tss))
+seqlevels(tss,force = TRUE) = paste0("chr",c(seq_len(22),"X","Y"))
 
 ## define promoters according to Grimm et al, 2012
 upstream = 500
 downstream = 1000
 fraglen = 300
 
-promoters = promoters(rd, upstream,downstream)
+promoters = promoters(tss, upstream,downstream)
 
 
 sizes = read_tsv("/p/keles/SOFTWARE/hg19.chrom.sizes",col_names= FALSE)
