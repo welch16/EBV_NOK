@@ -294,13 +294,13 @@ figsdr = "figs/diff_methylation/DESeq2_results"
 
 
 pdf(file.path(figsdr,"DESeq2_PCA_mC.pdf"))
-mC_PCA_plots %>% map(print)
+u = mC_PCA_plots %>% map(print)
 dev.off()
 
 
 
 pdf(file.path(figsdr,"DESeq2_PCA_hmC.pdf"))
-hmC_PCA_plots %>% map(print)
+u = hmC_PCA_plots %>% map(print)
 dev.off()
 
 

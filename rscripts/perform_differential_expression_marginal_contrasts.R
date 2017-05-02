@@ -23,6 +23,10 @@ optList = list(
 
 opt = parse_args(OptionParser(option_list = optList))
 
+## opt$mono_files = 'data/RSEM/hg19/RNAseq-noks-CaFBS-rep?.genes.results'
+## opt$treat_files = 'data/RSEM/hg19/RNAseq-akata-noks-CaFBS-rep?.genes.results'
+## opt$treatment = 'NOKS,EBV'
+
 ## opt$mono_files = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
 ## opt$treat_files = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
 ## opt$plot_title = "Scott NOKS: MC vs mono"

@@ -32,7 +32,7 @@ downstream = 1000
 fraglen = 300
 
 promoters = promoters(tss, upstream,downstream)
-
+promoters$description = NULL
 
 sizes = read_tsv("/p/keles/SOFTWARE/hg19.chrom.sizes",col_names= FALSE)
 genome = GRanges(seqnames = sizes$X1,
@@ -42,6 +42,8 @@ genome = GRanges(seqnames = sizes$X1,
 
 
 promoters = subsetByOverlaps(promoters,genome)
+promoters$ensembl_gene_id = names(promoters)
+names(promoters) = NULL
 
 promoterfile = "data/BED/hg19/MeDIPseq_promoters.bed"
 
@@ -94,7 +96,7 @@ count_matrix = bind_cols(
       mutate(width = NULL,strand = NULL),
     countvectors %>% do.call(cbind,.) %>% as.data.frame %>% as.tbl)
 
-write_tsv(count_matrix,
+write_tsv(count_matrix ,
           path = file.path(outdr,
                            paste0("MeDIPseq_PromotersCounts_upstr",upstream,
                                   "_downstr",downstream,"fraglen",fraglen,".tsv")))

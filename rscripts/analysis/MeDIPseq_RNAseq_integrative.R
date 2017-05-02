@@ -12,6 +12,9 @@ bp = MulticoreParam(workers = 10,bpprogressbar = TRUE)
 ## load DeSeq2 results
 deseqdr = "data/Diff.Genes/hg19/DESeq2_contrasts"
 deseqfiles = list.files(deseqdr,full.names = TRUE)
+deseqfiles = c(deseqfiles[grepl("ben",deseqfiles)],
+               deseqfiles[grepl("wo",deseqfiles)])
+
 
 deseqresults = lapply(deseqfiles,read_tsv)
 
@@ -24,7 +27,7 @@ diffgenes = deseqresults %>%
             dplyr::rename(p.value = pvalue)
         })
 
-names(diffgenes) = c("ben_CaFBS","ben_MC","scott_MC","scott_MC_woRep1")
+names(diffgenes) = c("ben_CaFBS","ben_MC","scott_MC")
 
 ## load DIP-seq count matrix
 dipdr = "data/MeDIPseq_results"
@@ -83,11 +86,15 @@ dipmat = dipmat %>% select(-contains("Input-rep1"),
 
 minDepth = 10e6
 
-w = which(dipdepths$depth > minDepth)
+w = which(dipdepths$depth > minDepth) %>% {dipdepths$file[.]} %>% {gsub(".sort.bam","",.)}
+
 dipdepths = dipdepths %>% filter(depth > minDepth) %>%
     mutate(file = gsub(".sort.bam","",file))
 
-dipmat = dipmat[, c(seq_len(4),4 + w)]
+
+dipmat = bind_cols(dipmat %>% select(-contains("MeDIPseq")),
+                   dipmat[,w])
+
 
 ## filter dipmat into genes,
 
@@ -97,12 +104,13 @@ sF = 1e9
 
 normalize_dip <- function(dip,dipdepth,scaleFactor )
 {
-    base = dip[,seq_len(10)]
+    base = dip %>% select(-contains("MeDIPseq"))
 
-    counts = dip[,-seq_len(10)] %>% as.list
+    counts = dip %>% select(contains("MeDIPseq")) %>% as.list
     nms = counts %>% names
 
-    rpkm = counts %>% map2(dipdepths$depth,
+    depths = dipdepths %>% filter(file %in% nms) %>% {.$depth}
+    rpkm = counts %>% map2(depths,
                            .f = function(count,nreads) scaleFactor * count / nreads) %>%
         bind_cols
 
@@ -129,110 +137,114 @@ clean_cols <- function(geneList)
 
 
 
-divide_by_Input <- function(dip)
-{
+## divide_by_Input <- function(dip)
+## {
 
-    base = dip[,seq_len(10)]
+##     base = dip[,seq_len(10)]
 
-    input = dip %>% select(contains("Input"))
-    dip = dip[,-seq_len(10)] %>% select(-contains("Input"))
+##     input = dip %>% select(contains("Input"))
+##     dip = dip[,-seq_len(10)] %>% select(-contains("Input"))
 
-    f = 1e-8
-    akata_treat = dip %>%
-        select(contains("akata")) %>% select(contains("CaFBS")) %>%
-        mutate_each( funs( (f + .) /( f +  input[[1]])))
-    akata_mono =  dip %>%
-        select(contains("akata")) %>% select(contains("mono")) %>%
-        mutate_each( funs( (f + .) / (f + input[[2]])))
-    noks_treat =  dip %>%
-        select(-contains("akata")) %>% select(contains("CaFBS")) %>%
-        mutate_each( funs( (f + .) / (f + input[[3]])))
-    noks_mono = dip %>%
-        select(-contains("akata")) %>% select(contains("mono")) %>%
-        mutate_each( funs( (f + .) / (f + input[[4]])))
+##     f = 1e-8
+##     akata_treat = dip %>%
+##         select(contains("akata")) %>% select(contains("CaFBS")) %>%
+##         mutate_each( funs( (f + .) /( f +  input[[1]])))
+##     akata_mono =  dip %>%
+##         select(contains("akata")) %>% select(contains("mono")) %>%
+##         mutate_each( funs( (f + .) / (f + input[[2]])))
+##     noks_treat =  dip %>%
+##         select(-contains("akata")) %>% select(contains("CaFBS")) %>%
+##         mutate_each( funs( (f + .) / (f + input[[3]])))
+##     noks_mono = dip %>%
+##         select(-contains("akata")) %>% select(contains("mono")) %>%
+##         mutate_each( funs( (f + .) / (f + input[[4]])))
 
-    out = bind_cols(akata_treat,
-              akata_mono,
-              noks_treat,
-              noks_mono) %>% mutate_all(funs(log10(.)))
-    bind_cols(base,out)
-}
+##     out = bind_cols(akata_treat,
+##               akata_mono,
+##               noks_treat,
+##               noks_mono) %>% mutate_all(funs(log10(.)))
+##     bind_cols(base,out)
+## }
 
 
 diplist = diplist %>% map(clean_cols)
-diplist = diplist %>% map(divide_by_Input)
+##diplist = diplist %>% map(divide_by_Input)
 
-heatmap_wrap <- function(geneList,methTr,scale)
-{
-    stopifnot(methTr %in% c("mC","hmC"))
+## heatmap_wrap <- function(geneList,methTr,scale)
+## {
+##     stopifnot(methTr %in% c("mC","hmC"))
 
-    base = geneList[,seq_len(10)]
-    X = geneList[,-seq_len(10)]
-    
-    if(methTr == "mC"){
-        X = X %>% select(-contains("hmC"))
-    }else{
-        X = X  %>% select(contains("hmC"))
-    }
+##     base = geneList[,seq_len(10)]
+##     X = geneList[,-seq_len(10)]
 
-    colnames(X) = gsub("MeDIPseq-","",colnames(X))
+##     input = X %>% select(contains("input"))
+##     X = X %>% select(-contains("input"))
     
-    superheat(X,
-              pretty.order.rows = TRUE,
-              pretty.order.cols = TRUE,
-              left.label = "none",
-              grid.vline.col = "white",
-              bottom.label.text.angle = 80,
-              bottom.label.text.size = 5,
-              grid.hline = FALSE,
-              scale = scale,
-              heat.na.col = "white")
+##     if(methTr == "mC"){
+##         X = X %>% select(-contains("hmC"))        
+##     }else{
+##         X = X  %>% select(contains("hmC"))
+##     }
+##     X = bind_cols(X,input)
+
+##     colnames(X) = gsub("MeDIPseq-","",colnames(X))
     
-}
+##     superheat(X,
+##               pretty.order.rows = TRUE,
+##               pretty.order.cols = FALSE,
+##               left.label = "none",
+##               grid.vline.col = "white",
+##               bottom.label.text.angle = 80,
+##               bottom.label.text.size = 3,
+##               grid.hline = FALSE,
+##               scale = scale,
+##               heat.na.col = "white")
+    
+## }
 
 ## plot MeDIP-seq heatmaps
 
 figsdr = "figs/joinGeneExpression_Methylation"
     
-png(file.path(figsdr,"methylHeatmaps","Heatmap_benCaFBS_mC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[1]],"mC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_benCaFBS_mC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[1]],"mC",TRUE)
+## dev.off()
 
-png(file.path(figsdr,"methylHeatmaps","Heatmap_benMC_mC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[2]],"mC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_benMC_mC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[2]],"mC",TRUE)
+## dev.off()
 
-png(file.path(figsdr,"methylHeatmaps","Heatmap_scottMC_mC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[3]],"mC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_scottMC_mC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[3]],"mC",TRUE)
+## dev.off()
 
-png(file.path(figsdr,"methylHeatmaps","Heatmap_scottMC_woRep1_mC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[4]],"mC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_scottMC_woRep1_mC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[4]],"mC",TRUE)
+## dev.off()
 
-png(file.path(figsdr,"methylHeatmaps","Heatmap_benCaFBS_hmC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[1]],"hmC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_benCaFBS_hmC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[1]],"hmC",TRUE)
+## dev.off()
 
-png(file.path(figsdr,"methylHeatmaps","Heatmap_benMC_hmC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[2]],"hmC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_benMC_hmC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[2]],"hmC",TRUE)
+## dev.off()
 
-png(file.path(figsdr,"methylHeatmaps","Heatmap_scottMC_hmC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[3]],"hmC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_scottMC_hmC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[3]],"hmC",TRUE)
+## dev.off()
 
-png(file.path(figsdr,"methylHeatmaps","Heatmap_scottMC_woRep1_hmC.png"),
-    width = 1200,height = 1400)
-heatmap_wrap( diplist[[4]],"hmC",TRUE)
-dev.off()
+## png(file.path(figsdr,"methylHeatmaps","CountHeatmap_scottMC_woRep1_hmC.png"),
+##     width = 1200,height = 1400)
+## heatmap_wrap( diplist[[4]],"hmC",TRUE)
+## dev.off()
 
 t.test_wrap <- function(...)
 {
