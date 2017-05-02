@@ -96,14 +96,15 @@ dev.off()
 annot = MEDIPS.getAnnotation(dataset = "hsapiens_gene_ensembl",
                              annotation = c("TSS","EXON","GENE"))
 
-
 sig_regions = MEDIPS.selectSig( mC_edgeR_results,p.value = .1) %>%
     mutate( upmeth = edgeR.logFC > 0) %>% split(.$upmeth) 
+
+load("data/MEDIPS/sig_diff_methyl_regions_mC.RData")
 
 
 ## down_methyl
 
-down_bed = MEDIPS.mergeFrames(sig_regions[[1]],distance = 1)
+down_bed = MEDIPS.mergeFrames(sig_regions[[1]],distance = 250)
 
 down_meth = annot %>% names %>% map( .f = function(x){
     MEDIPS.setAnnotation(down_bed,annot[[x]]) %>% as.tbl})
@@ -128,7 +129,7 @@ down_meth = down_meth %>% map(.f = function(x){
 
 
 
-up_bed = MEDIPS.mergeFrames(sig_regions[[2]],distance = 1)
+up_bed = MEDIPS.mergeFrames(sig_regions[[2]],distance = 250)
 
 
 up_meth = annot %>% names %>% map( .f = function(x){

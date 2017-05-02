@@ -1,0 +1,10 @@
+---
+title: "Join analysis MeDIP-seq / RNA-seq"
+author: "Rene Welch"
+date: "April 12, 2017"
+output:
+  revealjs::revealjs_presentation:
+    theme: simple
+    transition: none
+    self_contained: true
+--- 

@@ -3,6 +3,7 @@ library(shiny)
 library(tidyverse)
 library(grid)
 library(gridExtra)
+library(ggrepel)
   
 ## load gene expression data
 tpmmat = read_tsv("data/metadata/RSEM_gene_TPM_matrix.tsv")
@@ -26,19 +27,21 @@ dipdepths = dipdepths %>%
          !grepl("Input-rep2",file),
          !grepl("Input-rep3",file))
 
-dipmat = dipmat %>% select(-contains("Input-rep1"),
+dipmat = dipmat %>% dplyr::select(-contains("Input-rep1"),
                            -contains("Input-rep2"),
                            -contains("Input-rep3"))
   
 ## remove samples with very low sequencing depths
 minDepth = 10e6
-  
-w = which(dipdepths$depth > minDepth)
-dipdepths = dipdepths %>% filter(depth > minDepth) %>%
-  mutate(file = gsub(".sort.bam","",file))
-  
-dipmat = dipmat[, c(seq_len(4),4 + w)]
-dipmat = dipmat %>% right_join(tpmmat[,1:2],by = "ensembl")
+
+base = dipmat %>% dplyr::select(-contains("MeDIP"))
+
+w = dipdepths %>% filter(depth > minDepth) %>% {.$file} %>% 
+  {gsub(".sort.bam","",.)}
+
+dipmat = bind_cols(base,dipmat[w]) %>% right_join(tpmmat[,1:2],by = "ensembl") %>%
+  dplyr::select(ensembl,gene,seqnames,start,end,description,everything())
+
 genes = intersect(dipmat$gene,tpmmat$gene)
   
 tpmmat = tpmmat %>% filter(gene %in% genes) %>% dplyr::select(gene,ensembl,everything())
@@ -67,11 +70,15 @@ ui = fluidPage(
               label = "Genes",
               choices = genes,
               selected = genes[1]),
+  selectInput("methyltre",
+              label = "mC or hmC",
+              choices = c("mC","hmC"),
+              selected = "hmC"),
   fixedRow(
     tabsetPanel(type = "tabs", 
-                       tabPanel("Comparison", plotOutput("plot")), 
-                       tabPanel("Gene Expression", tableOutput("geneExp_table")),
-                       tabPanel("Methylation",tableOutput("meth_table"))
+                tabPanel("Comparison", plotOutput("plot")), 
+                tabPanel("Gene Expression", tableOutput("geneExp_table")),
+                tabPanel("Methylation",tableOutput("meth_table"))
              )
     )
   )
@@ -80,7 +87,7 @@ ui = fluidPage(
   #     selectInput("searchgene",
   #                 label = "Genes",
   #                 choices = genes,
-  #                 selected = genes[1])
+  #                 selected = genes[1]),
   #   ),
       
     # Show a tabset that includes a plot, summary, and table view
@@ -106,7 +113,7 @@ server = function(input, output) {
   geneExp <- reactive({
       
     mat = tpmmat %>% filter(gene == input$searchgene) %>%
-      select(contains("Scott"))
+      dplyr::select(contains("Scott"))
     mat = mat %>% t 
     nms = mat %>% rownames
     mat = tibble(sample = gsub("Scott.","",nms), tpm = mat[,1] ) %>% 
@@ -115,9 +122,14 @@ server = function(input, output) {
   })
     
   methyl <- reactive({
-    mat  = dipmat %>% filter(gene == input$searchgene)  %>% 
-      select(-contains("Input")) %>%
-      select(contains("hmC"))
+    mat  = dipmat %>% filter(gene == input$searchgene) %>%
+      dplyr::select(-contains("Input")) %>% dplyr::select(contains("MeDIP"))
+    if(input$methyltre == "hmC"){
+      mat = mat  %>% dplyr::select(contains("hmC"))
+    }else{
+      mat = mat %>% dplyr::select(-contains("hmC"))
+    }
+    
     mat = mat %>% t 
     nms = mat %>% rownames
     mat = tibble(sample = gsub("MeDIPseq-","",nms), tpm = mat[,1] ) %>% 

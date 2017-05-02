@@ -1,6 +1,6 @@
 ---
-title: "Join analysis MeDIP-seq / RNA-seq"
-  author: "Rene Welch"
+title: "Joint analysis MeDIP-seq / RNA-seq"
+author: "Rene Welch"
 date: "April 6, 2017"
 output:
   revealjs::revealjs_presentation:
@@ -101,8 +101,7 @@ clean_rates = bind_rows(
 
 - Fill matrix with $\log_2 \left( \text{sample} / \text{input}  \right)$
 
----
-
+<!---
 ### MeDIP-seq heatmaps
 
 <img src="../figs/joinGeneExpression_Methylation/methylHeatmaps/Heatmap_benCaFBS_mC.png" height="210" style="background:none; border:none; box-shadow:none;">
@@ -117,6 +116,8 @@ __Top__: mC, __Bottom__: hmC
 
 __Left__: benCaFBS, __Middle__: benMC, __Right__: ScottMC
 
+--->
+
 ## Differential methylation analysis
 
 - From the heatmaps, we can observe there is not obvious differential methylation (for either treatment of cell lines)
@@ -130,8 +131,7 @@ __Left__: benCaFBS, __Middle__: benMC, __Right__: ScottMC
   load("../data/MeDIPseq_results/DESeq2_joinExpression_Methylation_MC.RData")
   load("../data/MeDIPseq_results/DESeq2_joinExpression_Methylation_HMC.RData")
 
-  
-  
+
   pval_histogram <- function(deseq)
   {
     plots = deseq %>% map2(names(deseq),.f = function(x,y){
@@ -145,6 +145,17 @@ __Left__: benCaFBS, __Middle__: benMC, __Right__: ScottMC
     })
     
     arrangeGrob(plots[[1]],plots[[2]],plots[[3]],plots[[4]],nrow = 2)
+    
+  }  
+  
+  
+  pval_histogramlist <- function(deseq)
+  {
+    plots = deseq %>% map2(names(deseq),.f = function(x,y){
+      x %>% dplyr::rename(p.value = p.value.methyl)
+    })
+    
+    plots
     
   }  
   
@@ -174,19 +185,20 @@ __Left__: benCaFBS, __Middle__: benMC, __Right__: ScottMC
 
 1. With the HMC samples, possibly more genes are differentially methylated. I am going to focus on those gene lists.
 
-2. There are not a lot of differentially expressed genes, for example counting the differentially methylated genes (with HMC) for the Scott MC list, we get:
+2. There are not a lot of differentially expressed genes, for example counting the differentially methylated genes (with MC) for the Scott MC list, we get:
 
 ```{r example,include = TRUE,eval = TRUE}
 
-  geneList = mC_jointAnalysis_list[[3]] %>%
+  geneListMC = mC_jointAnalysis_list[[4]] %>%
     dplyr::rename(log2FC.exp = log2FC,
-                  log2FC.methyl = log2FoldChange) %>%
-          mutate(log2FC.exp = -log2FC.exp)
+                  log2FC.methyl = log2FoldChange)
   threshold = c(0.001,0.01,0.05,0.1,.3)
   tibble(threshold , 
-         ngenesDiffM = threshold %>% map_dbl(.f = function(x) geneList %>% filter(padj.methyl <= x) %>% nrow),
-         ngenesDiffE = threshold %>% map_dbl(.f = function(x)geneList %>% filter(padj.exp <= x ) %>% nrow),
-         ngenesInt = threshold %>% map_dbl(.f = function(x) geneList %>% 
+         ngenesDiffM = threshold %>% map_dbl(.f = function(x) geneListMC  %>% 
+                                               filter(padj.methyl <= x) %>% nrow),
+         ngenesDiffE = threshold %>% map_dbl(.f = function(x)geneListMC %>% 
+                                               filter(padj.exp <= x ) %>% nrow),
+         ngenesInt = threshold %>% map_dbl(.f = function(x) geneListMC %>% 
                                              filter(padj.methyl <= x & 
                                                     padj.exp <= x) %>% nrow))
 
@@ -194,96 +206,34 @@ __Left__: benCaFBS, __Middle__: benMC, __Right__: ScottMC
 
 3. Even less of these genes are differentially expressed too.
 
-```{r process_tpm_dip_matrices,include = FALSE,echo = FALSE,eval = TRUE}
+## Same table but with hmC
 
-tpmmat = read_tsv("../data/metadata/RSEM_gene_TPM_matrix.tsv")
+```{r example2,include = TRUE,eval = TRUE}
 
-
-tpmmat = tpmmat %>% 
-  separate(gene_id ,into = c("ensembl","gene"),sep = "\\_") %>%
-  dplyr::rename(transcript = `transcript_id(s)`)
-
-
-dipdr = "../data/MeDIPseq_results"
-dipmat = read_tsv(file.path(dipdr,"MeDIPseq_PromotersCounts_upstr500_downstr1000fraglen300.tsv"))
-colnames(dipmat)[1] = "ensembl"
-
-dipdepths = read_tsv("../data/metadata/MeDIPseq_sequencingDepth.tsv")
-
-
-## clean MeDIP-seq, removing input1,...,input3 because we
-## pooled them into input0
-
-dipdepths = dipdepths %>%
-  filter(!grepl("Input-rep1",file),
-         !grepl("Input-rep2",file),
-         !grepl("Input-rep3",file))
-
-dipmat = dipmat %>% select(-contains("Input-rep1"),
-                           -contains("Input-rep2"),
-                           -contains("Input-rep3"))
-
-## remove samples with very low sequencing depths
-
-minDepth = 10e6
-
-w = which(dipdepths$depth > minDepth)
-dipdepths = dipdepths %>% filter(depth > minDepth) %>%
-  mutate(file = gsub(".sort.bam","",file))
-
-dipmat = dipmat[, c(seq_len(4),4 + w)]
-
-dipmat = dipmat %>% right_join(tpmmat[,1:2],by = "ensembl")
-
+  geneListHMC = hmC_jointAnalysis_list[[4]] %>%
+    dplyr::rename(log2FC.exp = log2FC,
+                  log2FC.methyl = log2FoldChange)
+  threshold = c(0.001,0.01,0.05,0.1,.3)
+  tibble(threshold , 
+         ngenesDiffM = threshold %>% map_dbl(.f = function(x) geneListHMC %>% 
+                                               filter(padj.methyl <= x) %>% nrow),
+         ngenesDiffE = threshold %>% map_dbl(.f = function(x)geneListHMC %>% 
+                                               filter(padj.exp <= x ) %>% nrow),
+         ngenesInt = threshold %>% map_dbl(.f = function(x) geneListHMC %>% 
+                                             filter(padj.methyl <= x & 
+                                                    padj.exp <= x) %>% nrow))
 ```
 
-```{r boxplot_function,eval = TRUE}
+- Very few genes are diff. methylated and differentially expressed considering the hMC differential methylation dataset
 
-gene_exp <- function(gg,tpmmat,title = FALSE)
-{
-  mat = tpmmat %>% filter(gene == gg) %>% select(contains("Scott"))
-  mat = mat %>% t 
-  nms = mat %>% rownames
-  mat = tibble(sample = gsub("Scott.","",nms), tpm = mat[,1] ) %>% 
-    mutate(cell = ifelse(grepl("EBV",sample),"EBV","NOKS"))
+- The genes that are differentially expressed and differentially methylated by mC and hmC:
 
-  out = ggplot(mat,aes(cell,tpm))+geom_boxplot() +
-    geom_point()+geom_text_repel(aes(label = sample),show.legend = FALSE)
-  
-  if(title) out = out + ggtitle(gg)
+```{r inter,include=TRUE,eval = TRUE}
 
-  out
-}  
-
-
-gene_methyl <- function(gg,dipmat,title = FALSE)
-{
-  mat = dipmat %>% filter(gene == gg) %>% select(-contains("Input")) %>%
-    select(contains("hmC"))
-  mat = mat %>% t 
-  nms = mat %>% rownames
-  mat = tibble(sample = gsub("MeDIPseq-","",nms), tpm = mat[,1] ) %>% 
-    mutate(cell = ifelse(grepl("akata",sample),"EBV","NOKS"))
-  
-  out = ggplot(mat,aes(cell,tpm))+geom_boxplot() +
-    geom_point()+geom_text_repel(aes(label = sample),show.legend = FALSE)
-  
-  if(title) out = out + ggtitle(gg)
-  
-  out
-
-}  
-
-gene_plot = function(gene,tpmmat,dipmat)
-{
-  p1 = gene_exp(gene,tpmmat) + ylab("Gene expression")
-  p2 = gene_methyl(gene,dipmat) + ylab("Methylation")
-  
-  grid.arrange(p1,p2,top = gene,nrow = 1)
-  
-  
-}
-
+  intersect(  
+    geneListMC %>% filter(padj.exp <= .1 & padj.methyl <= .1) %>% .$gene,
+    geneListHMC %>% filter(padj.exp <= .1 & padj.methyl <= .1) %>% .$gene
+    )
 
 ```
 
@@ -291,26 +241,33 @@ gene_plot = function(gene,tpmmat,dipmat)
 
 ```{r explorPlots , include = FALSE,echo = FALSE,eval = TRUE}
 
-  tt = geneList %>% filter(padj.exp <= 0.1 & padj.methyl <= .1)
+  tt1 = geneListMC %>% filter(padj.exp <= 0.1 & padj.methyl <= .1)
+  tt1 = tt1 %>% mutate(log2FC.exp = -log2FC.exp)
+  
+  tt2 =geneListHMC %>% filter(padj.exp <= 0.1 & padj.methyl <= .1)
+  tt2 = tt2 %>% mutate(log2FC.exp = -log2FC.exp)
 
-  base = tt %>% ggplot(aes(x = log2FC.exp,y = log2FC.methyl)) + geom_point(size = 3) +
+  tt = bind_rows(tt1  %>% mutate(methtr = "mC"),
+                 tt2 %>% mutate(methtr = "hmC"))
+  
+  theme_set(theme_bw())
+  
+  base = tt %>% ggplot(aes(x = log2FC.exp,y = log2FC.methyl)) + geom_point(size = 2,shape = 1) +
     xlab("log2FC expression")+
     ylab("log2FC methylation")+
     geom_abline(slope = 0 , intercept = 0 , linetype = 2 ,colour = "red") +
-    geom_vline(xintercept = 0,linetype = 2 ,colour = "red")+theme_minimal()+coord_fixed()+
-    ylim(-2,2)
+    geom_vline(xintercept = 0,linetype = 2 ,colour = "red")+
+    facet_grid( ~ methtr)
 
-  withlabels0 = base +geom_text_repel(aes(label = gene),show.legend = FALSE)
+  withlabels = base +geom_text_repel(aes(label = gene),show.legend = FALSE)
 
   val = .2
-    
+  
   region1 = tibble(xmin = -Inf, xmax = -val, ymin = val, ymax = Inf)
   region2 = tibble(xmin = val , xmax = Inf , ymin = val, ymax = Inf)
   region3 = tibble(xmin = val, xmax = Inf, ymin = -Inf, ymax = -val)
   region4 = tibble(xmin = -Inf, xmax = -val, ymin = -Inf , ymax = -val)
-
-  withlabels = withlabels0 + xlim(-2,2)
-    
+  
   focus = withlabels + 
    geom_rect(data = region1,aes(xmin = xmin,xmax = xmax,ymin = ymin,ymax = ymax),
              fill="lightgreen",
@@ -321,7 +278,7 @@ gene_plot = function(gene,tpmmat,dipmat)
   
   focus2 = withlabels + 
    geom_rect(data = region2,aes(xmin = xmin,xmax = xmax,ymin = ymin,ymax = ymax),
-              fill="red",
+             fill="red",
              inherit.aes = FALSE,alpha = .3)+
     geom_rect(data = region4,aes(xmin = xmin,xmax = xmax,ymin = ymin, ymax = ymax),
               fill = "red",
@@ -329,135 +286,10 @@ gene_plot = function(gene,tpmmat,dipmat)
 
 ```
 
-```{r img0,include = TRUE,eval = TRUE,warning=FALSE,fig.height = 5}
 
-withlabels0
+```{r img1, include = TRUE,eval = TRUE,warning = FALSE,fig.height=5,fig.width = 10}
 
-```
-
----
-
-## Methylated and expressed genes
-
-```{r img01,include = TRUE,eval = TRUE,warning=FALSE,fig.height = 5}
-withlabels
-```
-
----
-
-## Genes in the green zone
-
-```{r img1, include = TRUE,eval = TRUE,warning = FALSE,fig.height=5}
-
-  focus
+  focus + xlim(-4,3)
 
 ```
 
---- 
-
-## Genes in the green zone
-
-```{r quad1_1,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("PRKCH",tpmmat,dipmat)
-
-```
-
----
-
-## Genes in the green zone
-
-```{r quad1_2,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("FHAD1",tpmmat,dipmat)
-
-```
-
----
-
-## Genes in the green zone
-
-```{r quad2_1,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("C11orf24",tpmmat,dipmat)
-
-```
-
-
-## Genes in the green zone
-
-```{r quad2_2,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("EIF3M",tpmmat,dipmat)
-
-```
-
-## Genes in the green zone
-
-```{r quad2_3,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("TRAP1",tpmmat,dipmat)
-
-```
-
-## Genes in the red zone
-
-```{r imag2 , include = TRUE,eval = TRUE,warning = FALSE, fig.height=5}
-
-focus2
-
-```
-
-
-## Genes in the red zone
-
-```{r quad3_1,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("SLC25A17",tpmmat,dipmat)
-
-```
-
-## Genes in the red zone
-
-```{r quad3_2,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("BBC3",tpmmat,dipmat)
-
-```
-
-## Genes in the red zone
-
-```{r quad3_3,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("AEN",tpmmat,dipmat)
-
-```
-
-
-## Genes in the red zone
-
-```{r quad4_1,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("C11orf84",tpmmat,dipmat)
-
-```
-
-## Genes in the red zone
-
-```{r quad4_2,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("ZNF790",tpmmat,dipmat)
-
-```
-
-## Genes in the red zone
-
-```{r quad4_3,include = TRUE,eval = TRUE,fig.height=5}
-
-gene_plot("PLA2G16",tpmmat,dipmat)
-
-```
-
-
-
-## Thanks

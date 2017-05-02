@@ -121,15 +121,15 @@ gene_plot = function(gene,tpmmat,dipmat)
   
 }
 
-gene_plot("FHAD1",tpmmat,dipmat)
-gene_plot("PRKCH",tpmmat,dipmat)
-
-
-gene_plot("C11orf24",tpmmat,dipmat)
-gene_plot("YIF1A",tpmmat,dipmat)
-gene_plot("EIF3M",tpmmat,dipmat)
-gene_plot("C11orf84",tpmmat,dipmat)
-gene_plot("C11orf84",tpmmat,dipmat)
-
-
-
+# gene_plot("FHAD1",tpmmat,dipmat)
+# gene_plot("PRKCH",tpmmat,dipmat)
+# 
+# 
+# gene_plot("C11orf24",tpmmat,dipmat)
+# gene_plot("YIF1A",tpmmat,dipmat)
+# gene_plot("EIF3M",tpmmat,dipmat)
+# gene_plot("C11orf84",tpmmat,dipmat)
+# gene_plot("C11orf84",tpmmat,dipmat)
+# 
+# 
+# 
