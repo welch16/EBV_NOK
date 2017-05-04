@@ -59,7 +59,7 @@ depths = depths %>%
 
 rpkm_vectors = count_vectors %>%
     map2(depths$total_depth,
-         .f = function(x,y)(1e9/y) * x)
+         .f = function(x,y)(1e9/(binsize* y)) * x)
              
 pal = viridis::viridis(1e3)
 
@@ -105,19 +105,19 @@ hmc = input - 1
 figsdr = "figs/methylation/bins"
 
 pdf(file.path(figsdr,"Hexbin_plot_mC_vs_hmC.pdf"))
-hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,1e3,1e3)+xlab("hmC")+ylab("mC") %>% print()
-hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,3e3,3e3)+xlab("hmC")+ylab("mC") %>% print()
-hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,5e3,5e3)+xlab("hmC")+ylab("mC") %>% print()
+hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,15,15)+xlab("hmC")+ylab("mC") %>% print()
+hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,25,25)+xlab("hmC")+ylab("mC") %>% print()
+hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,50,50)+xlab("hmC")+ylab("mC") %>% print()
 dev.off()
 
 pdf(file.path(figsdr,"Hexbin_plot_Input_vs_mC.pdf"))
-hexbin_plot(input,mc,rpkm_vectors,pal,depths,1e3,2e3)+xlab("Input")+ylab("mC") %>% print()
-hexbin_plot(input,mc,rpkm_vectors,pal,depths,2e3,3e3)+xlab("Input")+ylab("mC") %>% print()
-hexbin_plot(input,mc,rpkm_vectors,pal,depths,3e3,4e3)+xlab("Input")+ylab("mC") %>% print()
+hexbin_plot(input,mc,rpkm_vectors,pal,depths,10,15)+xlab("Input")+ylab("mC") %>% print()
+hexbin_plot(input,mc,rpkm_vectors,pal,depths,15,20)+xlab("Input")+ylab("mC") %>% print()
+hexbin_plot(input,mc,rpkm_vectors,pal,depths,40,50)+xlab("Input")+ylab("mC") %>% print()
 dev.off()
 
 pdf(file.path(figsdr,"Hexbin_plot_Input_vs_hmC.pdf"))
-hexbin_plot(input,hmc,rpkm_vectors,pal,depths,1e3,2e3)+xlab("Input")+ylab("hmC") %>% print()
-hexbin_plot(input,hmc,rpkm_vectors,pal,depths,2e3,3e3)+xlab("Input")+ylab("hmC") %>% print()
-hexbin_plot(input,hmc,rpkm_vectors,pal,depths,3e3,4e3)+xlab("Input")+ylab("hmC") %>% print()
+hexbin_plot(input,hmc,rpkm_vectors,pal,depths,10,15)+xlab("Input")+ylab("hmC") %>% print()
+hexbin_plot(input,hmc,rpkm_vectors,pal,depths,15,20)+xlab("Input")+ylab("hmC") %>% print()
+hexbin_plot(input,hmc,rpkm_vectors,pal,depths,40,50)+xlab("Input")+ylab("hmC") %>% print()
 dev.off()
