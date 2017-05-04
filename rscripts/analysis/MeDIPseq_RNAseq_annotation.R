@@ -430,4 +430,28 @@ genes = list(
 vennplot( genes,by = "Vennerable")
 dev.off()
 
+## upmethylated tibble
+
+create_tibble <- function(meth_ann)
+{
+
+    m1 = meth_ann@anno
+    m2 = meth_ann@detailGenomicAnnotation
+
+    bind_cols(
+        m1 %>% as.data.frame %>% as.tbl,
+        m2 %>% as.tbl
+        )
+    
+
+}
+
+diff_meth_anno = methyl_split_annot %>%
+    map(create_tibble) %>%
+    map2( names(methyl_split_annot),.f = function(x,y)x %>% mutate(methSet = y)) %>%
+    bind_rows
+
+save(diff_meth_anno,file = "data/MEDIPS/DiffMethyl_annotation.RData")
+
+
 
