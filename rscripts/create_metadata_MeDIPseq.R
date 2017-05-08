@@ -29,9 +29,10 @@ create_structure <- function(files)
     tibble( file = files,cell , treatment = treat, type,  rep = repl)
 }
 
-df = create_structure(files)
+df = create_structure(files) %>% filter(!grepl("Input",file))
 
-dfInput_pool = create_structure(filesInput_pool)
+dfInput_pool = create_structure(filesInput_pool) %>%
+    filter(grepl("Input",file))
 
 write_delim(df , path = "data/metadata/MeDIPseq_definition.tsv" ,
             delim = "\t")
