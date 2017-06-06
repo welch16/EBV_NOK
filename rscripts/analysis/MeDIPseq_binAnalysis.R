@@ -104,6 +104,66 @@ hmc = input - 1
 
 figsdr = "figs/methylation/bins"
 
+
+dt = rpkm_vectors[input] %>% bind_cols()
+names(dt) = paste("Input",rep(c("EBV","NOKS"),each = 2),rep(c("CaFBS","mono"),2),sep = "_")
+
+
+dt = dt %>%
+    mutate(EBV = .5 * (Input_EBV_CaFBS + Input_EBV_mono) ,
+           NOKS = .5 * (Input_NOKS_CaFBS + Input_NOKS_mono))
+
+nms = names(dt)
+ll = 20
+
+
+
+
+pdf(file.path(figsdr,"Hexbin_input.pdf"))
+ggplot(dt,aes_string(nms[2],nms[1]))+stat_binhex(bins = 80)+
+        scale_fill_gradientn(colours = pal,trans = "log10",
+                             labels = trans_format('log10',math_format(10^.x)),
+                             guide = guide_colourbar(title = NULL,
+                                                     barheight = unit(0.92,"npc"),
+                                                     barwidth = unit(0.01,"npc")))+
+    geom_abline(slope =1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(0,ll)+ylim(0,ll)
+ggplot(dt,aes_string(nms[4],nms[3]))+stat_binhex(bins = 80)+
+        scale_fill_gradientn(colours = pal,trans = "log10",
+                             labels = trans_format('log10',math_format(10^.x)),
+                             guide = guide_colourbar(title = NULL,
+                                                     barheight = unit(0.92,"npc"),
+                                                     barwidth = unit(0.01,"npc")))+
+    geom_abline(slope =1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(0,ll)+ylim(0,ll)
+ggplot(dt,aes_string(nms[3],nms[1]))+stat_binhex(bins = 80)+
+        scale_fill_gradientn(colours = pal,trans = "log10",
+                             labels = trans_format('log10',math_format(10^.x)),
+                             guide = guide_colourbar(title = NULL,
+                                                     barheight = unit(0.92,"npc"),
+                                                     barwidth = unit(0.01,"npc")))+
+    geom_abline(slope =1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(0,ll)+ylim(0,ll)
+ggplot(dt,aes_string(nms[4],nms[2]))+stat_binhex(bins = 80)+
+        scale_fill_gradientn(colours = pal,trans = "log10",
+                             labels = trans_format('log10',math_format(10^.x)),
+                             guide = guide_colourbar(title = NULL,
+                                                     barheight = unit(0.92,"npc"),
+                                                     barwidth = unit(0.01,"npc")))+
+    geom_abline(slope =1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(0,ll)+ylim(0,ll)
+ggplot(dt,aes_string(nms[5],nms[6]))+stat_binhex(bins = 80)+
+        scale_fill_gradientn(colours = pal,trans = "log10",
+                             labels = trans_format('log10',math_format(10^.x)),
+                             guide = guide_colourbar(title = NULL,
+                                                     barheight = unit(0.92,"npc"),
+                                                     barwidth = unit(0.01,"npc")))+
+    geom_abline(slope =1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(0,ll)+ylim(0,ll)
+dev.off()
+
+
+
 pdf(file.path(figsdr,"Hexbin_plot_mC_vs_hmC.pdf"))
 hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,15,15)+xlab("hmC")+ylab("mC") %>% print()
 hexbin_plot(hmc,mc,rpkm_vectors,pal,depths,25,25)+xlab("hmC")+ylab("mC") %>% print()
@@ -120,4 +180,27 @@ pdf(file.path(figsdr,"Hexbin_plot_Input_vs_hmC.pdf"))
 hexbin_plot(input,hmc,rpkm_vectors,pal,depths,10,15)+xlab("Input")+ylab("hmC") %>% print()
 hexbin_plot(input,hmc,rpkm_vectors,pal,depths,15,20)+xlab("Input")+ylab("hmC") %>% print()
 hexbin_plot(input,hmc,rpkm_vectors,pal,depths,40,50)+xlab("Input")+ylab("hmC") %>% print()
+dev.off()
+
+
+
+
+
+
+pdf(file.path(figsdr,"Hexbin_plot_mC_vs_hmC_counts.pdf"))
+hexbin_plot(hmc,mc,count_vectors,pal,depths,3e3,3e3)+xlab("hmC")+ylab("mC") %>% print()
+hexbin_plot(hmc,mc,count_vectors,pal,depths,5e3,5e3)+xlab("hmC")+ylab("mC") %>% print()
+hexbin_plot(hmc,mc,count_vectors,pal,depths,10e3,10e3)+xlab("hmC")+ylab("mC") %>% print()
+dev.off()
+
+pdf(file.path(figsdr,"Hexbin_plot_Input_vs_mC_counts.pdf"))
+hexbin_plot(input,mc,count_vectors,pal,depths,10 * 200,15 * 200)+xlab("Input")+ylab("mC") %>% print()
+hexbin_plot(input,mc,count_vectors,pal,depths,15 * 200,20 * 200)+xlab("Input")+ylab("mC") %>% print()
+hexbin_plot(input,mc,count_vectors,pal,depths,40 * 200,50 * 200)+xlab("Input")+ylab("mC") %>% print()
+dev.off()
+
+pdf(file.path(figsdr,"Hexbin_plot_Input_vs_hmC_counts.pdf"))
+hexbin_plot(input,hmc,count_vectors,pal,depths,10* 200,15* 200)+xlab("Input")+ylab("hmC") %>% print()
+hexbin_plot(input,hmc,count_vectors,pal,depths,15* 200,20* 200)+xlab("Input")+ylab("hmC") %>% print()
+hexbin_plot(input,hmc,count_vectors,pal,depths,40* 200,50* 200)+xlab("Input")+ylab("hmC") %>% print()
 dev.off()
