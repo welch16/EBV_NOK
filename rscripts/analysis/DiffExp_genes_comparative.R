@@ -10,7 +10,7 @@ files = indr %>% list.files(full.names = TRUE) %>%
 
 gene_list = files %>%
     map(read_tsv)
-names(gene_list) = c("EBV","EBV-","EBV-dRdZ","EBV (Scott)","EBV- (Scott)")
+names(gene_list) = c("EBV","EBV-","EBV-dRdZ","EBV","EBV-")
 
 
 create_venn_diagram <- function(thresh,gene_list)
@@ -58,6 +58,32 @@ thresh %>%
         gene_list[1:2] %>%
         map(filter,log2FoldChange < 0))
 
+thresh %>%
+    map(.f = function(x,genes){
+        pdf(file.path(figsdr,paste0("Venn_Diff_EBV_vs_NOKS_padj",x,"_Scott.pdf")))
+        create_venn_diagram(x,genes)
+        dev.off()},
+        gene_list[4:5])
+        
+
+thresh %>%
+    map(.f = function(x,genes){
+        pdf(file.path(figsdr,paste0("Venn_Diff_Up_EBV_vs_NOKS_padj",x,"_Scott.pdf")))
+        create_venn_diagram(x,genes)
+        dev.off()},
+        gene_list[4:5] %>%
+        map(filter,log2FoldChange > 0))
+
+thresh %>%
+    map(.f = function(x,genes){
+        pdf(file.path(figsdr,paste0("Venn_Diff_Down_EBV_vs_NOKS_padj",x,"_Scott.pdf")))
+        create_venn_diagram(x,genes)
+        dev.off()},
+        gene_list[4:5] %>%
+        map(filter,log2FoldChange < 0))
+
+
+
 ## 3 sets
 
 thresh %>%
@@ -83,3 +109,34 @@ thresh %>%
         dev.off()},
         gene_list[1:3] %>%
         map(filter,log2FoldChange < 0))
+
+##
+
+
+thresh %>%
+    map(.f = function(x,genes){
+        pdf(file.path(figsdr,paste0("Venn_Diff_EBV_vs_NOKS_vs_dRdZ_padj",x,"_Scott.pdf")))
+        create_venn_diagram(x,genes)
+        dev.off()},
+        gene_list[c(4:5,3)])
+        
+
+thresh %>%
+    map(.f = function(x,genes){
+        pdf(file.path(figsdr,paste0("Venn_Diff_Up_EBV_vs_NOKS_vs_dRdZ_padj",x,"_Scott.pdf")))
+        create_venn_diagram(x,genes)
+        dev.off()},
+        gene_list[c(4:5,3)] %>%
+        map(filter,log2FoldChange > 0))
+
+thresh %>%
+    map(.f = function(x,genes){
+        pdf(file.path(figsdr,paste0("Venn_Diff_Down_EBV_vs_NOKS_vs_dRdZ_padj",x,"_Scott.pdf")))
+        create_venn_diagram(x,genes)
+        dev.off()},
+        gene_list[c(4:5,3)] %>%
+        map(filter,log2FoldChange < 0))
+
+
+
+
