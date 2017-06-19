@@ -20,7 +20,8 @@ The key question to explore is to understand how does dRdZ affects differentiati
   library(grid)
   library(gridExtra)
   library(scales)
-  
+  library(Vennerable)
+
   theme_set(theme_bw())
     
 ```
@@ -170,7 +171,17 @@ diff_genes = diff_genes[names(summary_matrices)]
 
 ```
 
-## Exploratory analysis
+# Definitions
+
+We are going to define as:
+
+* $X$ covariates associated to the EBV- cell line
+
+* $Y$ covariates associated to the EBV cell line
+
+* $Z$ covariates associated to the EBV-dRdZ cell line
+
+### Exploratory analysis
 
 For each gene, we summarized the following quantities:
 
@@ -180,7 +191,7 @@ For each gene, we summarized the following quantities:
 
 and we summarized this matrices for each one of the following cells `r names(summary_matrices)`.
 
-### TPM
+#### TPM
 
 ```{r explo1,message=FALSE,warning=FALSE,fig.align="center",fig.width=10,fig.height=4}
 
@@ -214,12 +225,14 @@ and we summarized this matrices for each one of the following cells `r names(sum
     xlim(0,ll)+ ylim(0,ll)+xlab("TPM MC NOKS (Scott)")+ylab("TPM MC EBV (Scott)")+
     geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")
 
-  grid.arrange(plot1,plot2,nrow = 1)
+  grid.arrange(plot1+ggtitle("A"),
+               plot2+ggtitle("B"),
+               nrow = 1)
 
 
 ```
 
-### log2FC
+#### log2FC
 
 ```{r explo2,message=FALSE,warning=FALSE,fig.align="center",fig.width=10,fig.height=4}
 
@@ -255,24 +268,202 @@ and we summarized this matrices for each one of the following cells `r names(sum
     xlim(-ll,ll)+ylim(-ll,ll)+
     xlab("log2FC NOKS (Scott)")+ylab("log2FC EBV (Scott)")
 
-  grid.arrange(plot1,plot2,nrow = 1)
+  grid.arrange(plot1+ggtitle("A"),
+               plot2+ggtitle("B"),
+               nrow = 1)
 
 
 ```
 
+#### Expression TPM distribution by condition
 
-# Definitions
+```{r explo3,warning=FALSE,message=FALSE,fig.align="center",fig.width=10,fig.height=4}
 
-We are going to define as:
+base_data = summary_matrices %>% 
+  map2(diff_genes,
+       inner_join,by = c("ensembl_id","gene_id")) %>% 
+  map2(names(diff_genes),.f = function(x,y){
+    x %>% mutate(Cell = y)}) %>% 
+  bind_rows() %>% 
+  filter(Cell %in% names(diff_genes)[c(1,4,5)])
 
-* $X$ covariates associated to the EBV- cell line
+ll = 200
+fdr = 1e-2
 
-* $Y$ covariates associated to the EBV cell line
+all_genes_bp = base_data %>% 
+  ggplot(aes(Cell , treat_avg,fill = Cell)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  coord_cartesian(ylim = c(0,ll))+
+  theme(axis.title.x = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle = 25,hjust =1))+
+  ylab("MC average TPM per gene (all genes)")+
+  scale_fill_brewer(palette = "Pastel1")
 
-* $Z$ covariates associated to the EBV-dRdZ cell line
+diff_exp_bp = all_genes_bp %+%
+  (base_data %>%
+     filter(padj <= fdr))+
+  ylab("MC average TPM per gene (diff. exp. genes)")
+
+diff_upr = all_genes_bp %+%
+  (base_data %>% 
+     filter(padj <= fdr) %>% 
+     filter(log2FC > 0))+
+  ylab("MC average TPM per gene (diff. upreg. genes)")
+
+diff_down =   all_genes_bp %+%
+  (base_data %>% 
+     filter(padj <= fdr) %>% 
+     filter(log2FC < 0))+
+  ylab("MC average TPM per gene (diff. downreg. genes)")
+
+grid.arrange(
+  diff_exp_bp + ggtitle("A"),
+  all_genes_bp + ggtitle("B"),
+  diff_upr + ggtitle("C"),
+  diff_down + ggtitle("D"),
+  nrow = 1)
+  
+
+```
 
 
+```{r table}
 
+nCommon = base_data %>% 
+  filter(padj <= fdr) %>% 
+  group_by(ensembl_id) %>% 
+  summarise(n = n()) %>% 
+  filter(n == 3) %>% 
+  nrow()
+
+base_data %>% 
+  group_by(Cell) %>%
+  filter(padj <= fdr) %>% 
+  summarize(
+    DiffExp = n(),
+    Upreg = sum(log2FoldChange > 0),
+    Downreg = sum(log2FoldChange < 0),
+    DE_med_TPM = median(treat_avg),
+    UR_medTPM = median(treat_avg * ifelse(log2FoldChange > 0,1,NA),na.rm = TRUE ),
+    DR_medTPM = median(treat_avg * ifelse(log2FoldChange < 0, 1, NA),na.rm = TRUE))
+
+```
+
+From the fig. above, it can be seen that the TPM in the EBV dRdZ cell lines is increasing more than in the other cell lines. But that may be an artifact caused by the fact that there are less diff. expressed genes in the EBV dRdZ sample than in the other two cell lines. However, there are `r nCommon` genes that are differentially expressed in the 3 cell lines.
+
+```{r venn}
+
+venn = Venn(
+  base_data %>% 
+  filter(padj <= fdr) %>% 
+  split(.$Cell) %>% 
+  map(select,ensembl_id) %>% 
+  map(.f = function(x)x[[1]]))
+
+venn
+
+```
+
+```{r effect_plot,fig.align="center",fig.width=9,fig.height=9,warning=FALSE,message=FALSE}
+
+ll = 45
+
+effect_plot <- function(geneSet,base_data,summaryFun = mean)
+{
+  base_data %>% 
+    filter(ensembl_id %in% geneSet) %>% 
+    group_by(Cell) %>% 
+    summarize(
+      yes = summaryFun(treat_avg),
+      no = summaryFun(notreat_avg)
+    ) %>% 
+    gather(treat,summary,-Cell) %>% 
+    mutate(treat = factor(treat, levels =c("no","yes"))) %>% 
+    ggplot(aes(treat,summary,colour = Cell))+
+    geom_point()+
+    geom_line(aes(group = Cell))+
+    theme(legend.position = "none",
+          axis.title.x = element_blank())+
+    scale_color_brewer(palette = "Set1")+
+    ylim(0,ll)
+  
+}
+
+geneSets = venn@IntersectionSets
+
+DE_effects = geneSets[-1] %>% 
+  map(effect_plot,
+      base_data,median)
+UP_effects = geneSets[-1] %>% 
+  map(effect_plot,
+      base_data %>% 
+        filter(log2FoldChange > 0),
+      median)
+DO_effects = geneSets[-1] %>% 
+  map(effect_plot,
+      base_data %>% 
+        filter(log2FoldChange < 0),
+      median)
+
+## get legend 
+gg = ggplotGrob(DE_effects[[1]] + 
+                  theme(legend.position = "top"))$grobs
+
+legend = gg[[which(sapply(gg,function(x)x$name) == "guide-box")]]
+lh = sum(legend$height)                                                         
+
+grobs = c("111","110","100","010") %>% 
+  map(.f = function(x){
+    arrangeGrob(
+      DE_effects[[x]] + ylab("Median TPM") + ggtitle("All Diff. Expre. genes"),
+      UP_effects[[x]] + ylab("Median TPM") + ggtitle("All UpReg. genes"),
+      DO_effects[[x]] + ylab("Median TPM") + ggtitle("All DownReg genes"),
+      nrow = 1)
+  })
+
+grid.arrange(legend,
+             grobs[[1]],
+             grobs[[2]],
+             grobs[[3]],
+             grobs[[4]],
+             ncol = 1,
+             heights = 
+               unit.c(
+                 lh,
+                 unit(1/4,"npc") - lh,
+                 unit(1/4,"npc") - lh,
+                 unit(1/4,"npc") - lh,
+                 unit(1/4,"npc") - lh
+               ))
+
+```
+
+In the plot above:
+
+  * First row, genes diff. expressed in all three cell lines
+   
+  * Second row, genes diff. expressed in EBV dRdZ and EBV wt but not NOKS.
+  
+  * Third row, genes diff. expressed in EBV dRdZ only.
+  
+A couple thoughts,
+
+  * The expression seems to be behaving similarly in all three categories.
+  
+  * For EBV dRdZ, the effect of downregulated genes seems to show higher intensity than the effect in upregulated genes. It may be ocurring due to the fact that the ratio between upregulated and downregulared genes is 2 to 1.
+  
+#### First model idea
+
+Following the definitions stated above, we are going to measure gene expression using MC TPM, and we are going to fit the following models:
+
+$$
+\begin{align}
+Z_i &= \alpha_0 + \alpha_1 X_i + \varepsilon_i,\quad \varepsilon_i \sim N(0,\sigma^2_1) \\
+Y_i &= \beta_0 + \beta_1 X_i + \tilde{\varepsilon}_i,\quad \tilde{\varepsilon}_i \sim N(0,\sigma^2_2) 
+\end{align}
+$$
+*
 
 
 
