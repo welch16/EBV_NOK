@@ -1,0 +1,282 @@
+---
+title: "EBV differential expression analysis"
+output: html_notebook
+---
+
+# Introduction
+
+The key question to explore is to understand how does dRdZ affects differentiation compared to how does EBV affects differentiation. 
+
+```{r libraries,include=FALSE,echo=FALSE,eval=TRUE}
+
+  knitr::opts_chunk$set(echo = FALSE,
+                        eval = TRUE,
+                        message = FALSE,
+                        warning = FALSE)
+
+  library(tidyverse)
+  library(DESeq2)
+  library(viridis)
+  library(grid)
+  library(gridExtra)
+  library(scales)
+  
+  theme_set(theme_bw())
+    
+```
+
+## Brief explanation of the design
+
+We have 3 diff. cell lines: EBV, EBV- (NOKS) and EBV-dRdZ and for all of them we tested which genes are differentially expressed by applying a MC treatment, i.e. in total we have 6 different combinations between cell lines and treatments applied. The EBV and EBV- samples were generated independently twice by two labs.
+
+```{r load_data,warning=FALSE,message=FALSE}
+
+  files = list.files("..",recursive = TRUE,pattern = "tsv",full.names = TRUE)
+
+  tpm_mat_files = files %>% 
+          {.[grep("TPM",.)]}
+  tpm_matrices = tpm_mat_files %>% 
+          map2( c(" ","\t"),.f = function(x,y)read_delim(x,y))
+
+  diff_genes_files = files %>% 
+          {.[grep("marginal",.)]} %>%     
+          {.[grep("MC",.)]} 
+  diff_genes = diff_genes_files %>%
+          map(read_tsv)
+
+```
+
+```{r clean_data,warning=FALSE,message=FALSE}
+
+## Both TPM matrices have different formats in columns and such. 
+
+des1 = tibble(col = colnames(tpm_matrices[[1]][,-(1:2)])) %>% 
+  mutate(
+    cell = ifelse(grepl("akata",col),"EBV_dRdZ","EBV-"),
+    treat = ifelse(grepl("meth",col),"MC","no"),
+    rep = ifelse(grepl(1,col),1,2),
+    lab = "Johannsen"
+  )
+
+des2 = tibble(col = colnames(tpm_matrices[[2]][,-c(1:2)])) %>% 
+  separate(col , into = c("lab","cell","treat","rep"),sep = "\\.",remove = FALSE) %>% 
+  mutate(
+    cell = ifelse(cell == "EBV","EBV","EBV-"),
+    treat = ifelse(treat == "NoTr","no",treat),
+    rep = gsub("Rep","",rep) %>% as.numeric(),
+    lab = ifelse(lab == "Ben","Johannsen","Scott")
+  ) %>% 
+  select(col,cell,treat,rep,lab)
+
+tpm_matrices[[2]] = tpm_matrices[[2]] %>% 
+  select(-contains("transcrip")) %>% 
+  separate(gene_id,into = c("ensembl_id","gene_id"),sep = "\\_")
+
+## The genes tested are not exactly the same for each of the 5 DESeq2 runs
+
+common_genes = diff_genes %>% 
+  map(select,ensembl_id) %>% 
+  bind_rows() %>% 
+  group_by(ensembl_id) %>% 
+  summarize(n = n()) %>% 
+  filter(n == 5) %>% 
+  mutate(n = NULL)
+
+common_diff_genes = diff_genes %>% 
+  map(inner_join,common_genes,by = "ensembl_id") %>% 
+  map(mutate,padj = p.adjust(pvalue,method = "BH"))
+
+common_tpm_matrices = tpm_matrices %>% 
+  map(inner_join,common_genes,by = "ensembl_id")
+
+```
+
+When testing for diff. expressed genes, we ignored genes without expression. Therefore, only genes that were tested for diff. expression in all samples were considered. In total there are `r nrow(common_genes)` genes.
+
+```{r common_genes_plot,message=FALSE,warning=FALSE,fig.align='center',fig.height=3,fig.width=5}
+
+  tibble(genes =c("EBV (old)",
+                  "NOKS (old)",
+                  "EBV dRdZ",
+                  "EBV (Scott)",
+                  "NOKS (Scott)"),
+                  common = nrow(common_genes),
+                 total = diff_genes %>% map_int(nrow)) %>% 
+  mutate(
+    prop = common / total * 100
+  ) %>% 
+  ggplot(aes(genes,prop))+geom_bar(stat = "identity",colour ="blue",fill = "white")+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90))+
+  ylab("Common genes percentage")+
+  geom_abline(slope = 0,intercept = 90,linetype = 2,colour = "red")+
+  coord_cartesian(ylim = c(75,100))
+
+```
+ 
+ 
+```{r clean_matrices}
+
+create_matrix <- function(base,key_treat,key_no)
+{
+  base %>% 
+    mutate(
+      treat_avg = base %>% 
+        select(contains(key_treat)) %>% 
+        rowMeans(),
+      notreat_avg = base %>% 
+        select(contains(key_no)) %>% 
+        rowMeans(),
+      log2FC = log2((1 + treat_avg) / (1 + notreat_avg))
+    ) %>% 
+    select(
+      ensembl_id,
+      gene_id,
+      treat_avg,
+      notreat_avg,
+      log2FC
+    )
+}
+
+
+summary_matrices = list()
+summary_matrices[["EBV_dRdZ"]] = create_matrix(
+  tpm_matrices[[1]],"meth","no_tr"
+)
+summary_matrices[["EBV_Ben"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Ben.EBV")),"MC","NoTr"
+)
+summary_matrices[["NOKS_Ben"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Ben.NOKS")),"MC","NoTr"
+)
+summary_matrices[["EBV_Scott"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Scott.EBV")),"MC","NoTr"
+)
+summary_matrices[["NOKS_Scott"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Scott.NOKS")),"MC","NoTr"
+)
+
+summary_matrices = summary_matrices %>% 
+  map(
+    inner_join,common_genes,by = "ensembl_id"
+  )
+
+names(diff_genes) = c("EBV_Ben","NOKS_Ben","EBV_dRdZ","EBV_Scott","NOKS_Scott")
+diff_genes = diff_genes[names(summary_matrices)]
+
+```
+
+## Exploratory analysis
+
+For each gene, we summarized the following quantities:
+
+* `treat_avg` which is the average of all the samples of a given cell line that the `methyl` treatment was applied
+* `notreat_avg` which is the average of all the samples of a given cell lines that `no treatment` was aplied
+* `log2FC` which we defined as `log2( (1 + treat_avg) / (1 + notreat_avg))`.
+
+and we summarized this matrices for each one of the following cells `r names(summary_matrices)`.
+
+### TPM
+
+```{r explo1,message=FALSE,warning=FALSE,fig.align="center",fig.width=10,fig.height=4}
+
+  pal = viridis(1e3, option = "D") 
+  nbins = 40
+  ll = 100
+  
+  plot1 = summary_matrices[c(5,1)] %>% 
+    map(select,ensembl_id,treat_avg) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "treat_avg.x",y = "treat_avg.y"))+
+    stat_binhex(bins = nbins) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    xlim(0,ll)+ ylim(0,ll)+xlab("TPM MC NOKS (Scott)")+ylab("TPM MC dRdZ")+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")
+  
+  plot2 = summary_matrices[c(5,4)] %>% 
+    map(select,ensembl_id,treat_avg) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "treat_avg.x",y = "treat_avg.y"))+
+    stat_binhex(bins = nbins ) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    xlim(0,ll)+ ylim(0,ll)+xlab("TPM MC NOKS (Scott)")+ylab("TPM MC EBV (Scott)")+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")
+
+  grid.arrange(plot1,plot2,nrow = 1)
+
+
+```
+
+### log2FC
+
+```{r explo2,message=FALSE,warning=FALSE,fig.align="center",fig.width=10,fig.height=4}
+
+  pal = viridis(1e3, option = "D") 
+  nbins = 40
+  ll = 7.5
+
+  plot1 = summary_matrices[c(5,1)] %>% 
+    map(select,ensembl_id,log2FC) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "log2FC.x",y = "log2FC.y"))+
+    stat_binhex(bins = nbins) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(-ll,ll)+ylim(-ll,ll)+
+    xlab("log2FC NOKS (Scott)")+ylab("log2FC EBV dRdZ")
+  
+  plot2 = summary_matrices[c(5,4)] %>% 
+    map(select,ensembl_id,log2FC) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "log2FC.x",y = "log2FC.y"))+
+    stat_binhex(bins = nbins ) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(-ll,ll)+ylim(-ll,ll)+
+    xlab("log2FC NOKS (Scott)")+ylab("log2FC EBV (Scott)")
+
+  grid.arrange(plot1,plot2,nrow = 1)
+
+
+```
+
+
+# Definitions
+
+We are going to define as:
+
+* $X$ covariates associated to the EBV- cell line
+
+* $Y$ covariates associated to the EBV cell line
+
+* $Z$ covariates associated to the EBV-dRdZ cell line
+
+
+
+
+
+
+
+
+
+
