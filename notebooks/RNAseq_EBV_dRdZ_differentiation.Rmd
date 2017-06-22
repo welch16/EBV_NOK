@@ -21,6 +21,7 @@ The key question to explore is to understand how does dRdZ affects differentiati
   library(gridExtra)
   library(scales)
   library(Vennerable)
+  library(broom)
 
   theme_set(theme_bw())
     
@@ -361,9 +362,13 @@ venn = Venn(
   map(select,ensembl_id) %>% 
   map(.f = function(x)x[[1]]))
 
+EBV_subsets = c("111","110","100","010")
+
 venn
 
 ```
+
+We are going to plot the effect in the following subsets `r EBV_subsets`.
 
 ```{r effect_plot,fig.align="center",fig.width=9,fig.height=9,warning=FALSE,message=FALSE}
 
@@ -413,7 +418,7 @@ gg = ggplotGrob(DE_effects[[1]] +
 legend = gg[[which(sapply(gg,function(x)x$name) == "guide-box")]]
 lh = sum(legend$height)                                                         
 
-grobs = c("111","110","100","010") %>% 
+grobs = EBV_subsets %>% 
   map(.f = function(x){
     arrangeGrob(
       DE_effects[[x]] + ylab("Median TPM") + ggtitle("All Diff. Expre. genes"),
@@ -446,7 +451,7 @@ In the plot above:
   * Second row, genes diff. expressed in EBV dRdZ and EBV wt but not NOKS.
   
   * Third row, genes diff. expressed in EBV dRdZ only.
-  
+
 A couple thoughts,
 
   * The expression seems to be behaving similarly in all three categories.
@@ -463,11 +468,83 @@ Z_i &= \alpha_0 + \alpha_1 X_i + \varepsilon_i,\quad \varepsilon_i \sim N(0,\sig
 Y_i &= \beta_0 + \beta_1 X_i + \tilde{\varepsilon}_i,\quad \tilde{\varepsilon}_i \sim N(0,\sigma^2_2) 
 \end{align}
 $$
-*
+
+We are going to fit this model, for several datasets built from the Venn diagram and compare 
+standarized effects $\alpha_1 / \sigma_1$ and $\beta_1 / \sigma_2$.
+
+```{r effect_comp}
+
+rename_mat = function(x,nm)
+{
+  names(x) = c("ensembl_id",nm)
+  x
+}
+
+fit_linear_models <- function(subsets,venn,res1_mat,res2_mat,common_mat,col)
+{
+  genes = subsets %>%
+    map(.f = function(x)venn@IntersectionSets[[x]]) %>% {do.call(c,.)}
+
+  common_mat = common_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("X")
+  res1_mat = res1_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Y")
+  res2_mat = res2_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Z")
+
+  data = common_mat %>% 
+    inner_join(res1_mat,by = "ensembl_id") %>% 
+    inner_join(res2_mat,by = "ensembl_id") %>% 
+    filter(ensembl_id %in% genes) %>% 
+    mutate_if(is.numeric,funs(log(1 + .)))
+  
+  
+  ## did test by hand and models with log are better    
+  # models = list()
+  # models[["Z"]] = lm(log(1 + Z) ~ log(1 + X) , data = data)
+  # models[["Y"]] = lm(log(1 + Y) ~ log(1 + X) , data = data)
+  
+  models = list()
+  models[["Z"]] = lm(Z ~ X, data = data)
+  models[["Y"]] = lm(Y ~ X, data  = data)
+  
+  models
+
+}
 
 
 
+test1 = fit_linear_models(c("111","100","001"),
+                              venn,
+                              res1_mat = summary_matrices[["EBV_Scott"]],
+                              res2_mat = summary_matrices[["EBV_dRdZ"]],
+                              common_mat = summary_matrices[["NOKS_Scott"]],
+                              "treat_avg")
 
+compare_coeff <- function(two_models)
+{
+  est_param = two_models %>% 
+    map(tidy) %>% 
+    map2(names(two_models),
+         .f = function(x,y)x %>% mutate(name = y)) 
+  
+  summaries = two_models %>% 
+    map(glance) %>% 
+    map2(names(two_models),
+         .f = function(x,y)x %>% mutate(name = y)) 
+
+  est_param %>%
+    map2(summaries,left_join,by =  "name") %>% 
+    bind_rows()
+  
+}
+
+dd = compare_coeff(test1) %>% 
+  filter(term == "X") %>% 
+  mutate(AA = estimate / std.error) %>% 
+  select(name,AA)
+
+```
 
 
 
