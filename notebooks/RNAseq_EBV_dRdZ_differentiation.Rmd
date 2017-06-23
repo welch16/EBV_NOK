@@ -289,7 +289,7 @@ base_data = summary_matrices %>%
   filter(Cell %in% names(diff_genes)[c(1,4,5)])
 
 ll = 200
-fdr = 1e-2
+fdr = 5e-2
 
 all_genes_bp = base_data %>% 
   ggplot(aes(Cell , treat_avg,fill = Cell)) + 
@@ -374,6 +374,20 @@ We are going to plot the effect in the following subsets `r EBV_subsets`.
 
 ll = 45
 
+effect_tibble <- function(geneSet,base_data,type,summaryFun = mean)
+{
+    base_data %>% 
+    filter(ensembl_id %in% geneSet) %>% 
+    group_by(Cell) %>% 
+    summarize(
+      yes = summaryFun(treat_avg),
+      no = summaryFun(notreat_avg)
+    ) %>% 
+    gather(treat,summary,-Cell) %>% 
+    mutate(treat = factor(treat, levels =c("no","yes")),
+           type )
+}
+
 effect_plot <- function(geneSet,base_data,summaryFun = mean)
 {
   base_data %>% 
@@ -397,66 +411,50 @@ effect_plot <- function(geneSet,base_data,summaryFun = mean)
 
 geneSets = venn@IntersectionSets
 
-DE_effects = geneSets[-1] %>% 
-  map(effect_plot,
-      base_data,median)
-UP_effects = geneSets[-1] %>% 
-  map(effect_plot,
-      base_data %>% 
-        filter(log2FoldChange > 0),
-      median)
-DO_effects = geneSets[-1] %>% 
-  map(effect_plot,
-      base_data %>% 
-        filter(log2FoldChange < 0),
-      median)
+gene_tbl = list(
+  "DE" = geneSets[-1] %>% 
+  map(effect_tibble,
+      base_data,
+      "Diff.Exp",median) %>% 
+  map2(names(.),.f = function(x,y)x %>% mutate(venn = y)) %>% 
+  bind_rows() , 
+  "UR" = geneSets[-1] %>% 
+    map(effect_tibble,
+        base_data %>%
+          filter(log2FoldChange > 0),
+        "Up.Reg",median) %>% 
+    map2(names(.),.f =function(x,y)x %>% mutate(venn =y )) %>% 
+    bind_rows(),
+  "DR" = geneSets[-1] %>% 
+    map(effect_tibble,
+        base_data %>%
+          filter(log2FoldChange < 0),
+        "Do.Reg",median) %>% 
+    map2(names(.),.f =function(x,y)x %>% mutate(venn =y )) %>% 
+    bind_rows()) %>% 
+  bind_rows()
 
-## get legend 
-gg = ggplotGrob(DE_effects[[1]] + 
-                  theme(legend.position = "top"))$grobs
+gene_tbl %>% 
+  mutate(type = factor(type ,levels = c("Diff.Exp","Up.Reg","Do.Reg"))) %>% 
+  ggplot(aes(treat,summary,colour = Cell))+
+  geom_point()+geom_line(aes(group = Cell))+
+  theme(legend.position = "top",
+        axis.title.x = element_blank())+
+  facet_grid(venn ~ type)+
+  scale_color_brewer(palette = "Set1")+
+  ylim(0,ll)+
+  ylab("Median TPM")
 
-legend = gg[[which(sapply(gg,function(x)x$name) == "guide-box")]]
-lh = sum(legend$height)                                                         
-
-grobs = EBV_subsets %>% 
-  map(.f = function(x){
-    arrangeGrob(
-      DE_effects[[x]] + ylab("Median TPM") + ggtitle("All Diff. Expre. genes"),
-      UP_effects[[x]] + ylab("Median TPM") + ggtitle("All UpReg. genes"),
-      DO_effects[[x]] + ylab("Median TPM") + ggtitle("All DownReg genes"),
-      nrow = 1)
-  })
-
-grid.arrange(legend,
-             grobs[[1]],
-             grobs[[2]],
-             grobs[[3]],
-             grobs[[4]],
-             ncol = 1,
-             heights = 
-               unit.c(
-                 lh,
-                 unit(1/4,"npc") - lh,
-                 unit(1/4,"npc") - lh,
-                 unit(1/4,"npc") - lh,
-                 unit(1/4,"npc") - lh
-               ))
 
 ```
 
-In the plot above:
+In the plot above, the horizontal panels divide by the genes considered by their expression type (either all diff. expressed genes together or only up/down regulated genes); the verical panels denote the binary code of the diff. expressed genes considered by cell. For example, `101` means consider diff. expressed genes by the MC treatment in the EBV.dRdZ and EBV- (NOKS) cell lines.
 
-  * First row, genes diff. expressed in all three cell lines
-   
-  * Second row, genes diff. expressed in EBV dRdZ and EBV wt but not NOKS.
-  
-  * Third row, genes diff. expressed in EBV dRdZ only.
+<!-- A couple thoughts, -->
 
-A couple thoughts,
+<!--   * The expression seems to be behaving similarly in all three categories. -->
 
-  * The expression seems to be behaving similarly in all three categories.
-  
-  * For EBV dRdZ, the effect of downregulated genes seems to show higher intensity than the effect in upregulated genes. It may be ocurring due to the fact that the ratio between upregulated and downregulared genes is 2 to 1.
+<!--   * For EBV dRdZ, the effect of downregulated genes seems to show higher intensity than the effect in upregulated genes. It may be ocurring due to the fact that the ratio between upregulated and downregulared genes is 2 to 1. -->
   
 #### First model idea
 
@@ -497,13 +495,7 @@ fit_linear_models <- function(subsets,venn,res1_mat,res2_mat,common_mat,col)
     inner_join(res2_mat,by = "ensembl_id") %>% 
     filter(ensembl_id %in% genes) %>% 
     mutate_if(is.numeric,funs(log(1 + .)))
-  
-  
-  ## did test by hand and models with log are better    
-  # models = list()
-  # models[["Z"]] = lm(log(1 + Z) ~ log(1 + X) , data = data)
-  # models[["Y"]] = lm(log(1 + Y) ~ log(1 + X) , data = data)
-  
+
   models = list()
   models[["Z"]] = lm(Z ~ X, data = data)
   models[["Y"]] = lm(Y ~ X, data  = data)
@@ -512,14 +504,13 @@ fit_linear_models <- function(subsets,venn,res1_mat,res2_mat,common_mat,col)
 
 }
 
-
-
-test1 = fit_linear_models(c("111","100","001"),
-                              venn,
-                              res1_mat = summary_matrices[["EBV_Scott"]],
-                              res2_mat = summary_matrices[["EBV_dRdZ"]],
-                              common_mat = summary_matrices[["NOKS_Scott"]],
-                              "treat_avg")
+two_models_list = vennSets %>% 
+  map(fit_linear_models,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
 
 compare_coeff <- function(two_models)
 {
