@@ -119,7 +119,7 @@ When testing for diff. expressed genes, we ignored genes without expression. The
  
 ```{r clean_matrices}
 
-create_matrix <- function(base,key_treat,key_no)
+create_matrix = function(base,key_treat,key_no)
 {
   base %>% 
     mutate(
@@ -364,7 +364,45 @@ venn = Venn(
 
 EBV_subsets = c("111","110","100","010")
 
-venn
+up_matrices = base_data %>% 
+  filter(padj <= fdr) %>% 
+  filter(log2FoldChange > 0) %>% 
+  split(.$Cell)
+
+up_venn = up_matrices %>% 
+  map(select,ensembl_id) %>% 
+  map(.f = function(x)x[[1]]) %>% 
+  Venn()
+
+down_matrices = base_data %>% 
+  filter(padj <= fdr) %>% 
+  filter(log2FoldChange < 0) %>% 
+  split(.$Cell)
+
+down_venn = down_matrices %>% 
+  map(select,ensembl_id) %>% 
+  map(.f = function(x)x[[1]]) %>% 
+  Venn()
+
+nms = venn@IndicatorWeight %>% rownames()
+venn_mat = list(
+  "All" = venn@IndicatorWeight[,4],
+  "Upreg" = up_venn@IndicatorWeight[,4],
+  "Downreg" = down_venn@IndicatorWeight[,4]
+  ) %>% 
+  map(.f = function(x){
+    names(x) = NULL
+    t(x)
+  }) %>% 
+  map(as.numeric) %>% 
+  as_tibble() %>% 
+  mutate(
+    Set = nms
+  ) %>% 
+  select(Set,everything()) %>% 
+  filter(Set != "000")
+
+venn_mat
 
 ```
 
@@ -374,7 +412,7 @@ We are going to plot the effect in the following subsets `r EBV_subsets`.
 
 ll = 45
 
-effect_tibble <- function(geneSet,base_data,type,summaryFun = mean)
+effect_tibble = function(geneSet,base_data,type,summaryFun = mean)
 {
     base_data %>% 
     filter(ensembl_id %in% geneSet) %>% 
@@ -388,7 +426,7 @@ effect_tibble <- function(geneSet,base_data,type,summaryFun = mean)
            type )
 }
 
-effect_plot <- function(geneSet,base_data,summaryFun = mean)
+effect_plot = function(geneSet,base_data,summaryFun = mean)
 {
   base_data %>% 
     filter(ensembl_id %in% geneSet) %>% 
@@ -456,7 +494,7 @@ In the plot above, the horizontal panels divide by the genes considered by their
 
 <!--   * For EBV dRdZ, the effect of downregulated genes seems to show higher intensity than the effect in upregulated genes. It may be ocurring due to the fact that the ratio between upregulated and downregulared genes is 2 to 1. -->
   
-#### First model idea
+#### Two separate models, same covariate but different response
 
 Following the definitions stated above, we are going to measure gene expression using MC TPM, and we are going to fit the following models:
 
@@ -470,7 +508,16 @@ $$
 We are going to fit this model, for several datasets built from the Venn diagram and compare 
 standarized effects $\alpha_1 / \sigma_1$ and $\beta_1 / \sigma_2$.
 
-```{r effect_comp}
+```{r effect_comp,fig.align="center",fig.height=4,fig.width=7}
+
+vennSets = list(
+  "EBV.dRdZ only" = c("100"),
+  "EBV only" = c("010"),
+  "EBV- only" = c("001"),
+  "EBV.dRdZ" = c("100","101","110","111"),
+  "EBV or EBV.dRdZ" = c("100","010","110","101","011","111"),
+  "Intersection" = c("111")
+)
 
 rename_mat = function(x,nm)
 {
@@ -478,7 +525,7 @@ rename_mat = function(x,nm)
   x
 }
 
-fit_linear_models <- function(subsets,venn,res1_mat,res2_mat,common_mat,col)
+fit_linear_models = function(subsets,venn,res1_mat,res2_mat,common_mat,col)
 {
   genes = subsets %>%
     map(.f = function(x)venn@IntersectionSets[[x]]) %>% {do.call(c,.)}
@@ -504,38 +551,112 @@ fit_linear_models <- function(subsets,venn,res1_mat,res2_mat,common_mat,col)
 
 }
 
-two_models_list = vennSets %>% 
+two_models_list = vennSets %>%
   map(fit_linear_models,
       venn,
       res1_mat = summary_matrices[["EBV_Scott"]],
       res2_mat = summary_matrices[["EBV_dRdZ"]],
       common_mat = summary_matrices[["NOKS_Scott"]],
       "treat_avg")
-
-compare_coeff <- function(two_models)
+ 
+compare_coeff = function(two_models)
 {
-  est_param = two_models %>% 
-    map(tidy) %>% 
+  est_param = two_models %>%
+    map(tidy) %>%
     map2(names(two_models),
-         .f = function(x,y)x %>% mutate(name = y)) 
-  
-  summaries = two_models %>% 
-    map(glance) %>% 
+         .f = function(x,y)x %>% mutate(name = y))
+
+  summaries = two_models %>%
+    map(glance) %>%
     map2(names(two_models),
-         .f = function(x,y)x %>% mutate(name = y)) 
+         .f = function(x,y)x %>% mutate(name = y))
 
   est_param %>%
-    map2(summaries,left_join,by =  "name") %>% 
+    map2(summaries,left_join,by =  "name") %>%
     bind_rows()
-  
+
 }
 
-dd = compare_coeff(test1) %>% 
-  filter(term == "X") %>% 
-  mutate(AA = estimate / std.error) %>% 
-  select(name,AA)
+do_comparison = function(models)
+{
+  models %>% 
+  map(compare_coeff) %>% 
+  map2(names(.),
+       .f = function(x,y)
+         x %>% mutate(model = y)) %>% 
+  bind_rows()
+
+}
+
+comparison = do_comparison(two_models_list)
+bl = 5 
+
+plot_coeff = function(comparison)
+{
+  comparison %>% 
+    filter(term == "X") %>% 
+    mutate(
+      coeff = estimate / sigma,
+      name = ifelse(name == "Y","EBV","EBV.dRdZ"),
+      model = factor(model,levels  = names(vennSets))
+      ) %>% 
+    select(
+      name,coeff,model
+      ) %>% 
+    ggplot(aes(name,coeff,fill = name))+
+    geom_bar(stat = "identity",colour = "black")+
+    scale_fill_brewer(palette = "Pastel1")+
+    facet_wrap( ~ model, nrow = 2)+
+    theme(
+      legend.position = "none"  ,
+      axis.title.x = element_blank()
+      )+
+    ylab("Standarized coeff")+ylim(0,bl)
+}
+
+plot_coeff(comparison)+ggtitle("Diff. expressed genes")
 
 ```
+
+### Model comparison for Up/down regulated genes
+
+We repeated the previous analysis, using only the up/down regulated genes to build the gene sets. This is a bit tricky, because there are genes that are not differentially expressed
+
+```{r up_down}
+
+UP_two_models_list = vennSets %>%
+  map(fit_linear_models,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+DO_two_models_list = vennSets %>%
+  map(fit_linear_models,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+UP_comp = do_comparison(UP_two_models_list)
+DO_comp = do_comparison(DO_two_models_list)
+
+```
+
+```{r up_effect,fig.align="center",fig.height=4,fig.width=7}
+
+plot_coeff(UP_comp)+ggtitle("Up-regulated coefficients")
+
+```
+
+```{r do_effect,fig.align="center",fig.height=4,fig.width=7}
+
+plot_coeff(DO_comp)+ggtitle("Down-regulated coefficients")
+
+```
+
 
 
 
