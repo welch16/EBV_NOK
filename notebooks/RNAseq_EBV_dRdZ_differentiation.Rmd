@@ -31,7 +31,7 @@ The key question to explore is to understand how does dRdZ affects differentiati
 
 We have 3 diff. cell lines: EBV, EBV- (NOKS) and EBV-dRdZ and for all of them we tested which genes are differentially expressed by applying a MC treatment, i.e. in total we have 6 different combinations between cell lines and treatments applied. The EBV and EBV- samples were generated independently twice by two labs.
 
-```{r load_data,warning=FALSE,message=FALSE}
+```{r load_data,warning=FALSE,message=FALSE,warning=FALSE}
 
   files = list.files("..",recursive = TRUE,pattern = "tsv",full.names = TRUE)
 
@@ -494,19 +494,19 @@ In the plot above, the horizontal panels divide by the genes considered by their
 
 <!--   * For EBV dRdZ, the effect of downregulated genes seems to show higher intensity than the effect in upregulated genes. It may be ocurring due to the fact that the ratio between upregulated and downregulared genes is 2 to 1. -->
   
-#### Two separate models, same covariate but different response
+# Two separate models, same covariate but different response
 
 Following the definitions stated above, we are going to measure gene expression using MC TPM, and we are going to fit the following models:
 
 $$
 \begin{align}
-Z_i &= \alpha_0 + \alpha_1 X_i + \varepsilon_i,\quad \varepsilon_i \sim N(0,\sigma^2_1) \\
-Y_i &= \beta_0 + \beta_1 X_i + \tilde{\varepsilon}_i,\quad \tilde{\varepsilon}_i \sim N(0,\sigma^2_2) 
+Z_i &= \alpha_0 + \alpha_1 X_i + \varepsilon_i,\quad \varepsilon_i \sim N(0,\sigma^2) \\
+Y_i &= \beta_0 + \beta_1 X_i + \tilde{\varepsilon}_i,\quad \tilde{\varepsilon}_i \sim N(0,\tau^2) 
 \end{align}
 $$
 
 We are going to fit this model, for several datasets built from the Venn diagram and compare 
-standarized effects $\alpha_1 / \sigma_1$ and $\beta_1 / \sigma_2$.
+standarized effects $\alpha_1 / \sigma$ and $\beta_1 / \tau$.
 
 ```{r effect_comp,fig.align="center",fig.height=4,fig.width=7}
 
@@ -589,7 +589,6 @@ do_comparison = function(models)
 }
 
 comparison = do_comparison(two_models_list)
-bl = 5 
 
 plot_coeff = function(comparison)
 {
@@ -611,14 +610,29 @@ plot_coeff = function(comparison)
       legend.position = "none"  ,
       axis.title.x = element_blank()
       )+
-    ylab("Standarized coeff")+ylim(0,bl)
+    ylab("Standarized coeff")
 }
 
 plot_coeff(comparison)+ggtitle("Diff. expressed genes")
 
 ```
 
-### Model comparison for Up/down regulated genes
+```{r no_treat_comp,fig.align="center",fig.height=4,fig.width=7}
+
+vennSets %>%
+  map(fit_linear_models,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg") %>% 
+  do_comparison() %>% 
+  plot_coeff()+ggtitle("Diff. expressed genes / no treatment")
+
+
+```
+
+#### Model comparison for Up/down regulated genes
 
 We repeated the previous analysis, using only the up/down regulated genes to build the gene sets. This is a bit tricky, because there are genes that are not differentially expressed
 
@@ -651,11 +665,210 @@ plot_coeff(UP_comp)+ggtitle("Up-regulated coefficients")
 
 ```
 
+```{r down_effect_notreat,fig.align="center",fig.height=4,fig.width=7,message=FALSE,warning=FALSE}
+
+vennSets %>% 
+  map(fit_linear_models,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg") %>% 
+  do_comparison() %>% 
+  plot_coeff()+ggtitle("Up-regulated coeff. / no treatment")
+
+```
+
+
 ```{r do_effect,fig.align="center",fig.height=4,fig.width=7}
 
 plot_coeff(DO_comp)+ggtitle("Down-regulated coefficients")
 
 ```
+
+```{r up_effect_notreat,fig.align="center",fig.height=4,fig.width=7,message=FALSE,warning=FALSE}
+
+vennSets %>% 
+  map(fit_linear_models,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg") %>% 
+  do_comparison() %>% 
+  plot_coeff()+ggtitle("Down-regulated coeff. / no treatment")
+
+```
+
+# Same intercept, same variance models
+
+The idea is to do a similar model, to the one before but using same variance and same intercept:
+
+$$
+\begin{align}
+Z_i &= \gamma + \alpha X_i + \varepsilon_i,\quad \varepsilon_i \sim N(0,\sigma^2) \\
+Y_i &= \gamma + \beta X_i + \tilde{\varepsilon}_i,\quad \tilde{\varepsilon}_i \sim N(0,\sigma^2) 
+\end{align}
+$$
+
+
+```{r alter_model}
+
+fit_linear_models_same_int = function(subsets,venn,res1_mat,res2_mat,common_mat,col)
+{
+  genes = subsets %>%
+    map(.f = function(x)venn@IntersectionSets[[x]]) %>% {do.call(c,.)}
+
+  common_mat = common_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("X")
+  res1_mat = res1_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Y")
+  res2_mat = res2_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Z")
+
+  data = common_mat %>% 
+    inner_join(res1_mat,by = "ensembl_id") %>% 
+    inner_join(res2_mat,by = "ensembl_id") %>% 
+    filter(ensembl_id %in% genes) %>% 
+    mutate_if(is.numeric,funs(log(1 + .)))
+  
+  zero = rep(0,nrow(data))
+  data = tibble(
+    response = c(data$Y,data$Z),
+    Y = c(data$X,zero),
+    Z = c(zero,data$X)
+  )
+  
+  lm(response ~ . , data = data)
+  
+}
+
+plot_coeff2 = function(model_list)
+{
+  ll = 
+    list(
+      nms = model_list %>% 
+        names(),
+      tidy = model_list %>% 
+        map(tidy),
+      glance = model_list %>% 
+        map(glance)
+      ) %>%
+    pmap(.f = function(nms,tidy,glance){
+      left_join(
+        tidy %>% 
+          mutate(
+            model = nms
+            ),
+        glance %>% 
+          mutate(
+            model = nms
+            ),
+        by = "model")}) %>%
+    bind_rows() %>% 
+    mutate(
+      norm.coeff = estimate / sigma
+      ) %>% 
+    filter(term %in% c("Y","Z")) %>% 
+    mutate(
+      term = ifelse(term == "Y","EBV","EBV.dRdZ")
+      )
+  
+  ll %>% 
+    ggplot(aes(term,norm.coeff,fill = term))+
+    geom_bar(stat = "identity",colour = "black")+
+    scale_fill_brewer(palette = "Pastel1")+
+    facet_wrap( ~ model, nrow = 2)+
+    theme(
+      legend.position = "none"  ,
+      axis.title.x = element_blank()
+      )+
+    ylab("Standarized coeff")+ylim(0,bl)
+}
+
+model_list = vennSets %>% 
+  map(fit_linear_models_same_int,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+model_list_no = vennSets %>% 
+  map(fit_linear_models_same_int,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg")
+
+UP_model_list = vennSets %>% 
+  map(fit_linear_models_same_int,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+UP_model_list_no = vennSets %>% 
+  map(fit_linear_models_same_int,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg")
+
+DO_model_list = vennSets %>% 
+  map(fit_linear_models_same_int,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+DO_model_list_no = vennSets %>% 
+  map(fit_linear_models_same_int,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg")
+
+
+```
+
+```{r same_models,fig.align="center",fig.width=7,fig.height=4,warning=FALSE,message=FALSE}
+
+bl = 3.5
+model_list %>% plot_coeff2()+ggtitle("All Diff. Expr. Genes")
+
+```
+
+```{r same_models_no,fig.align="center",fig.width=7,fig.height=4,warning=FALSE,message=FALSE}
+
+model_list_no %>% plot_coeff2()+ggtitle("All Diff. Expr. Genes / no treatment")
+
+```
+
+#### Same intercept model comparison for Up / down regulated genes
+
+```{r UP_same_models,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+UP_model_list %>% plot_coeff2()+ggtitle("Up regulated genes ")
+```
+
+```{r UP_same_models_no,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+UP_model_list_no %>% plot_coeff2()+ggtitle("Up regulated genes / no treatment")
+```
+
+```{r DOWN_same_models,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+DO_model_list %>% plot_coeff2()+ggtitle("Down regulated genes ")
+```
+
+
+```{r DOWN_same_models_no,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+DO_model_list_no %>% plot_coeff2()+ggtitle("Down regulated genes / no treatment")
+```
+
 
 
 
