@@ -866,10 +866,83 @@ DO_model_list %>% plot_coeff2()+ggtitle("Down regulated genes ")
 
 
 ```{r DOWN_same_models_no,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+alpha = .05
 DO_model_list_no %>% plot_coeff2()+ggtitle("Down regulated genes / no treatment")
 ```
 
+We then, calculate `r 100* (1 - alpha / 2)`% confidence intervals:
+
+```{r conf_int,message=FALSE,warning=FALSE}
+
+library(Matrix)
+library(DT)
+
+conf_intervals_same_int = function(model,alpha = .05)
+{
+  
+  data = model %>% 
+    augment() %>% 
+    as_tibble()
+  
+  mat = data %>% 
+    select(Y,Z) %>% as.matrix() %>% 
+    {cbind(1,.)} %>% Matrix()
+
+  Vinv = t(mat) %*% mat %>% 
+    solve()
+  
+  u = Matrix(c(0,1,-1))
+  C = t(u) %*% Vinv %*% u %>%
+    as.numeric()
+  
+  z = qnorm(1 - alpha / 2 )
+  
+  est = model %>% 
+    tidy() %>% {.$estimate}
+  
+  d = est[2] - est[3]
+  
+  s = model %>% 
+    glance() %>% 
+    {.$sigma}
+  
+  marg = z  * sqrt(C)
+  
+  c(d/s,d/s - marg, d/s + marg)
+  
+}
 
 
 
+conf_int = list(
+  "all_treat" = model_list,
+  "all_treat_no" = model_list_no,
+  "up_treat" = UP_model_list,
+  "up_treat_no" = UP_model_list_no,
+  "down_treat" = DO_model_list,
+  "down_treat_no" = DO_model_list_no
+) %>% 
+  map(.f = function(x){
+    nms = names(x)
+    out = x %>% 
+      map(conf_intervals_same_int,alpha) %>% 
+      bind_rows() %>% 
+      t() %>% as_tibble() %>% 
+      mutate(Model = nms) %>% 
+      select(Model,everything()) %>% 
+      mutate_if(is.numeric,funs(round(.,4)))
+    names(out) = c("Model","Std. Diff.","lower","upper")
+    out
+  }) 
 
+  conf_int %>% 
+    map2(names(.),.f = function(x,y)x %>% mutate(Comp = y)) %>% 
+    bind_rows( ) %>% 
+    select(Comp,everything()) %>% 
+    datatable(options = list(pageLength = 6)) %>% 
+    formatStyle(columns = "Std. Diff.",color = styleInterval(0,c("red","blue"))) %>% 
+    formatStyle(columns = "lower",color = styleInterval(0,c("red","blue"))) %>% 
+    formatStyle(columns = "upper",color = styleInterval(0,c("red","blue")))
+
+
+```
