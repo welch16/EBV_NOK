@@ -1,0 +1,948 @@
+---
+title: "EBV differential expression analysis"
+output: html_notebook
+---
+
+# Introduction
+
+The key question to explore is to understand how does dRdZ affects differentiation compared to how does EBV affects differentiation. 
+
+```{r libraries,include=FALSE,echo=FALSE,eval=TRUE}
+
+  knitr::opts_chunk$set(echo = FALSE,
+                        eval = TRUE,
+                        message = FALSE,
+                        warning = FALSE)
+
+  library(tidyverse)
+  library(DESeq2)
+  library(viridis)
+  library(grid)
+  library(gridExtra)
+  library(scales)
+  library(Vennerable)
+  library(broom)
+
+  theme_set(theme_bw())
+    
+```
+
+## Brief explanation of the design
+
+We have 3 diff. cell lines: EBV, EBV- (NOKS) and EBV-dRdZ and for all of them we tested which genes are differentially expressed by applying a MC treatment, i.e. in total we have 6 different combinations between cell lines and treatments applied. The EBV and EBV- samples were generated independently twice by two labs.
+
+```{r load_data,warning=FALSE,message=FALSE,warning=FALSE}
+
+  files = list.files("..",recursive = TRUE,pattern = "tsv",full.names = TRUE)
+
+  tpm_mat_files = files %>% 
+          {.[grep("TPM",.)]}
+  tpm_matrices = tpm_mat_files %>% 
+          map2( c(" ","\t"),.f = function(x,y)read_delim(x,y))
+
+  diff_genes_files = files %>% 
+          {.[grep("marginal",.)]} %>%     
+          {.[grep("MC",.)]} 
+  diff_genes = diff_genes_files %>%
+          map(read_tsv)
+
+```
+
+```{r clean_data,warning=FALSE,message=FALSE}
+
+## Both TPM matrices have different formats in columns and such. 
+
+des1 = tibble(col = colnames(tpm_matrices[[1]][,-(1:2)])) %>% 
+  mutate(
+    cell = ifelse(grepl("akata",col),"EBV_dRdZ","EBV-"),
+    treat = ifelse(grepl("meth",col),"MC","no"),
+    rep = ifelse(grepl(1,col),1,2),
+    lab = "Johannsen"
+  )
+
+des2 = tibble(col = colnames(tpm_matrices[[2]][,-c(1:2)])) %>% 
+  separate(col , into = c("lab","cell","treat","rep"),sep = "\\.",remove = FALSE) %>% 
+  mutate(
+    cell = ifelse(cell == "EBV","EBV","EBV-"),
+    treat = ifelse(treat == "NoTr","no",treat),
+    rep = gsub("Rep","",rep) %>% as.numeric(),
+    lab = ifelse(lab == "Ben","Johannsen","Scott")
+  ) %>% 
+  select(col,cell,treat,rep,lab)
+
+tpm_matrices[[2]] = tpm_matrices[[2]] %>% 
+  select(-contains("transcrip")) %>% 
+  separate(gene_id,into = c("ensembl_id","gene_id"),sep = "\\_")
+
+## The genes tested are not exactly the same for each of the 5 DESeq2 runs
+
+common_genes = diff_genes %>% 
+  map(select,ensembl_id) %>% 
+  bind_rows() %>% 
+  group_by(ensembl_id) %>% 
+  summarize(n = n()) %>% 
+  filter(n == 5) %>% 
+  mutate(n = NULL)
+
+common_diff_genes = diff_genes %>% 
+  map(inner_join,common_genes,by = "ensembl_id") %>% 
+  map(mutate,padj = p.adjust(pvalue,method = "BH"))
+
+common_tpm_matrices = tpm_matrices %>% 
+  map(inner_join,common_genes,by = "ensembl_id")
+
+```
+
+When testing for diff. expressed genes, we ignored genes without expression. Therefore, only genes that were tested for diff. expression in all samples were considered. In total there are `r nrow(common_genes)` genes.
+
+```{r common_genes_plot,message=FALSE,warning=FALSE,fig.align='center',fig.height=3,fig.width=5}
+
+  tibble(genes =c("EBV (old)",
+                  "NOKS (old)",
+                  "EBV dRdZ",
+                  "EBV (Scott)",
+                  "NOKS (Scott)"),
+                  common = nrow(common_genes),
+                 total = diff_genes %>% map_int(nrow)) %>% 
+  mutate(
+    prop = common / total * 100
+  ) %>% 
+  ggplot(aes(genes,prop))+geom_bar(stat = "identity",colour ="blue",fill = "white")+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 90))+
+  ylab("Common genes percentage")+
+  geom_abline(slope = 0,intercept = 90,linetype = 2,colour = "red")+
+  coord_cartesian(ylim = c(75,100))
+
+```
+ 
+ 
+```{r clean_matrices}
+
+create_matrix = function(base,key_treat,key_no)
+{
+  base %>% 
+    mutate(
+      treat_avg = base %>% 
+        select(contains(key_treat)) %>% 
+        rowMeans(),
+      notreat_avg = base %>% 
+        select(contains(key_no)) %>% 
+        rowMeans(),
+      log2FC = log2((1 + treat_avg) / (1 + notreat_avg))
+    ) %>% 
+    select(
+      ensembl_id,
+      gene_id,
+      treat_avg,
+      notreat_avg,
+      log2FC
+    )
+}
+
+
+summary_matrices = list()
+summary_matrices[["EBV_dRdZ"]] = create_matrix(
+  tpm_matrices[[1]],"meth","no_tr"
+)
+summary_matrices[["EBV_Ben"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Ben.EBV")),"MC","NoTr"
+)
+summary_matrices[["NOKS_Ben"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Ben.NOKS")),"MC","NoTr"
+)
+summary_matrices[["EBV_Scott"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Scott.EBV")),"MC","NoTr"
+)
+summary_matrices[["NOKS_Scott"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Scott.NOKS")),"MC","NoTr"
+)
+
+summary_matrices = summary_matrices %>% 
+  map(
+    inner_join,common_genes,by = "ensembl_id"
+  )
+
+names(diff_genes) = c("EBV_Ben","NOKS_Ben","EBV_dRdZ","EBV_Scott","NOKS_Scott")
+diff_genes = diff_genes[names(summary_matrices)]
+
+```
+
+# Definitions
+
+We are going to define as:
+
+* $X$ covariates associated to the EBV- cell line
+
+* $Y$ covariates associated to the EBV cell line
+
+* $Z$ covariates associated to the EBV-dRdZ cell line
+
+### Exploratory analysis
+
+For each gene, we summarized the following quantities:
+
+* `treat_avg` which is the average of all the samples of a given cell line that the `methyl` treatment was applied
+* `notreat_avg` which is the average of all the samples of a given cell lines that `no treatment` was aplied
+* `log2FC` which we defined as `log2( (1 + treat_avg) / (1 + notreat_avg))`.
+
+and we summarized this matrices for each one of the following cells `r names(summary_matrices)`.
+
+#### TPM
+
+```{r explo1,message=FALSE,warning=FALSE,fig.align="center",fig.width=10,fig.height=4}
+
+  pal = viridis(1e3, option = "D") 
+  nbins = 40
+  ll = 100
+  
+  plot1 = summary_matrices[c(5,1)] %>% 
+    map(select,ensembl_id,treat_avg) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "treat_avg.x",y = "treat_avg.y"))+
+    stat_binhex(bins = nbins) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    xlim(0,ll)+ ylim(0,ll)+xlab("TPM MC NOKS (Scott)")+ylab("TPM MC dRdZ")+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")
+  
+  plot2 = summary_matrices[c(5,4)] %>% 
+    map(select,ensembl_id,treat_avg) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "treat_avg.x",y = "treat_avg.y"))+
+    stat_binhex(bins = nbins ) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    xlim(0,ll)+ ylim(0,ll)+xlab("TPM MC NOKS (Scott)")+ylab("TPM MC EBV (Scott)")+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")
+
+  grid.arrange(plot1+ggtitle("A"),
+               plot2+ggtitle("B"),
+               nrow = 1)
+
+
+```
+
+#### log2FC
+
+```{r explo2,message=FALSE,warning=FALSE,fig.align="center",fig.width=10,fig.height=4}
+
+  pal = viridis(1e3, option = "D") 
+  nbins = 40
+  ll = 7.5
+
+  plot1 = summary_matrices[c(5,1)] %>% 
+    map(select,ensembl_id,log2FC) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "log2FC.x",y = "log2FC.y"))+
+    stat_binhex(bins = nbins) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(-ll,ll)+ylim(-ll,ll)+
+    xlab("log2FC NOKS (Scott)")+ylab("log2FC EBV dRdZ")
+  
+  plot2 = summary_matrices[c(5,4)] %>% 
+    map(select,ensembl_id,log2FC) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = "log2FC.x",y = "log2FC.y"))+
+    stat_binhex(bins = nbins ) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")+
+    xlim(-ll,ll)+ylim(-ll,ll)+
+    xlab("log2FC NOKS (Scott)")+ylab("log2FC EBV (Scott)")
+
+  grid.arrange(plot1+ggtitle("A"),
+               plot2+ggtitle("B"),
+               nrow = 1)
+
+
+```
+
+#### Expression TPM distribution by condition
+
+```{r explo3,warning=FALSE,message=FALSE,fig.align="center",fig.width=10,fig.height=4}
+
+base_data = summary_matrices %>% 
+  map2(diff_genes,
+       inner_join,by = c("ensembl_id","gene_id")) %>% 
+  map2(names(diff_genes),.f = function(x,y){
+    x %>% mutate(Cell = y)}) %>% 
+  bind_rows() %>% 
+  filter(Cell %in% names(diff_genes)[c(1,4,5)])
+
+ll = 200
+fdr = 5e-2
+
+all_genes_bp = base_data %>% 
+  ggplot(aes(Cell , treat_avg,fill = Cell)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  coord_cartesian(ylim = c(0,ll))+
+  theme(axis.title.x = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle = 25,hjust =1))+
+  ylab("MC average TPM per gene (all genes)")+
+  scale_fill_brewer(palette = "Pastel1")
+
+diff_exp_bp = all_genes_bp %+%
+  (base_data %>%
+     filter(padj <= fdr))+
+  ylab("MC average TPM per gene (diff. exp. genes)")
+
+diff_upr = all_genes_bp %+%
+  (base_data %>% 
+     filter(padj <= fdr) %>% 
+     filter(log2FC > 0))+
+  ylab("MC average TPM per gene (diff. upreg. genes)")
+
+diff_down =   all_genes_bp %+%
+  (base_data %>% 
+     filter(padj <= fdr) %>% 
+     filter(log2FC < 0))+
+  ylab("MC average TPM per gene (diff. downreg. genes)")
+
+grid.arrange(
+  diff_exp_bp + ggtitle("A"),
+  all_genes_bp + ggtitle("B"),
+  diff_upr + ggtitle("C"),
+  diff_down + ggtitle("D"),
+  nrow = 1)
+  
+
+```
+
+
+```{r table}
+
+nCommon = base_data %>% 
+  filter(padj <= fdr) %>% 
+  group_by(ensembl_id) %>% 
+  summarise(n = n()) %>% 
+  filter(n == 3) %>% 
+  nrow()
+
+base_data %>% 
+  group_by(Cell) %>%
+  filter(padj <= fdr) %>% 
+  summarize(
+    DiffExp = n(),
+    Upreg = sum(log2FoldChange > 0),
+    Downreg = sum(log2FoldChange < 0),
+    DE_med_TPM = median(treat_avg),
+    UR_medTPM = median(treat_avg * ifelse(log2FoldChange > 0,1,NA),na.rm = TRUE ),
+    DR_medTPM = median(treat_avg * ifelse(log2FoldChange < 0, 1, NA),na.rm = TRUE))
+
+```
+
+From the fig. above, it can be seen that the TPM in the EBV dRdZ cell lines is increasing more than in the other cell lines. But that may be an artifact caused by the fact that there are less diff. expressed genes in the EBV dRdZ sample than in the other two cell lines. However, there are `r nCommon` genes that are differentially expressed in the 3 cell lines.
+
+```{r venn}
+
+venn = Venn(
+  base_data %>% 
+  filter(padj <= fdr) %>% 
+  split(.$Cell) %>% 
+  map(select,ensembl_id) %>% 
+  map(.f = function(x)x[[1]]))
+
+EBV_subsets = c("111","110","100","010")
+
+up_matrices = base_data %>% 
+  filter(padj <= fdr) %>% 
+  filter(log2FoldChange > 0) %>% 
+  split(.$Cell)
+
+up_venn = up_matrices %>% 
+  map(select,ensembl_id) %>% 
+  map(.f = function(x)x[[1]]) %>% 
+  Venn()
+
+down_matrices = base_data %>% 
+  filter(padj <= fdr) %>% 
+  filter(log2FoldChange < 0) %>% 
+  split(.$Cell)
+
+down_venn = down_matrices %>% 
+  map(select,ensembl_id) %>% 
+  map(.f = function(x)x[[1]]) %>% 
+  Venn()
+
+nms = venn@IndicatorWeight %>% rownames()
+venn_mat = list(
+  "All" = venn@IndicatorWeight[,4],
+  "Upreg" = up_venn@IndicatorWeight[,4],
+  "Downreg" = down_venn@IndicatorWeight[,4]
+  ) %>% 
+  map(.f = function(x){
+    names(x) = NULL
+    t(x)
+  }) %>% 
+  map(as.numeric) %>% 
+  as_tibble() %>% 
+  mutate(
+    Set = nms
+  ) %>% 
+  select(Set,everything()) %>% 
+  filter(Set != "000")
+
+venn_mat
+
+```
+
+We are going to plot the effect in the following subsets `r EBV_subsets`.
+
+```{r effect_plot,fig.align="center",fig.width=9,fig.height=9,warning=FALSE,message=FALSE}
+
+ll = 45
+
+effect_tibble = function(geneSet,base_data,type,summaryFun = mean)
+{
+    base_data %>% 
+    filter(ensembl_id %in% geneSet) %>% 
+    group_by(Cell) %>% 
+    summarize(
+      yes = summaryFun(treat_avg),
+      no = summaryFun(notreat_avg)
+    ) %>% 
+    gather(treat,summary,-Cell) %>% 
+    mutate(treat = factor(treat, levels =c("no","yes")),
+           type )
+}
+
+effect_plot = function(geneSet,base_data,summaryFun = mean)
+{
+  base_data %>% 
+    filter(ensembl_id %in% geneSet) %>% 
+    group_by(Cell) %>% 
+    summarize(
+      yes = summaryFun(treat_avg),
+      no = summaryFun(notreat_avg)
+    ) %>% 
+    gather(treat,summary,-Cell) %>% 
+    mutate(treat = factor(treat, levels =c("no","yes"))) %>% 
+    ggplot(aes(treat,summary,colour = Cell))+
+    geom_point()+
+    geom_line(aes(group = Cell))+
+    theme(legend.position = "none",
+          axis.title.x = element_blank())+
+    scale_color_brewer(palette = "Set1")+
+    ylim(0,ll)
+  
+}
+
+geneSets = venn@IntersectionSets
+
+gene_tbl = list(
+  "DE" = geneSets[-1] %>% 
+  map(effect_tibble,
+      base_data,
+      "Diff.Exp",median) %>% 
+  map2(names(.),.f = function(x,y)x %>% mutate(venn = y)) %>% 
+  bind_rows() , 
+  "UR" = geneSets[-1] %>% 
+    map(effect_tibble,
+        base_data %>%
+          filter(log2FoldChange > 0),
+        "Up.Reg",median) %>% 
+    map2(names(.),.f =function(x,y)x %>% mutate(venn =y )) %>% 
+    bind_rows(),
+  "DR" = geneSets[-1] %>% 
+    map(effect_tibble,
+        base_data %>%
+          filter(log2FoldChange < 0),
+        "Do.Reg",median) %>% 
+    map2(names(.),.f =function(x,y)x %>% mutate(venn =y )) %>% 
+    bind_rows()) %>% 
+  bind_rows()
+
+gene_tbl %>% 
+  mutate(type = factor(type ,levels = c("Diff.Exp","Up.Reg","Do.Reg"))) %>% 
+  ggplot(aes(treat,summary,colour = Cell))+
+  geom_point()+geom_line(aes(group = Cell))+
+  theme(legend.position = "top",
+        axis.title.x = element_blank())+
+  facet_grid(venn ~ type)+
+  scale_color_brewer(palette = "Set1")+
+  ylim(0,ll)+
+  ylab("Median TPM")
+
+
+```
+
+In the plot above, the horizontal panels divide by the genes considered by their expression type (either all diff. expressed genes together or only up/down regulated genes); the verical panels denote the binary code of the diff. expressed genes considered by cell. For example, `101` means consider diff. expressed genes by the MC treatment in the EBV.dRdZ and EBV- (NOKS) cell lines.
+
+<!-- A couple thoughts, -->
+
+<!--   * The expression seems to be behaving similarly in all three categories. -->
+
+<!--   * For EBV dRdZ, the effect of downregulated genes seems to show higher intensity than the effect in upregulated genes. It may be ocurring due to the fact that the ratio between upregulated and downregulared genes is 2 to 1. -->
+  
+# Two separate models, same covariate but different response
+
+Following the definitions stated above, we are going to measure gene expression using MC TPM, and we are going to fit the following models:
+
+$$
+\begin{align}
+Z_i &= \alpha_0 + \alpha_1 X_i + \varepsilon_i,\quad \varepsilon_i \sim N(0,\sigma^2) \\
+Y_i &= \beta_0 + \beta_1 X_i + \tilde{\varepsilon}_i,\quad \tilde{\varepsilon}_i \sim N(0,\tau^2) 
+\end{align}
+$$
+
+We are going to fit this model, for several datasets built from the Venn diagram and compare 
+standarized effects $\alpha_1 / \sigma$ and $\beta_1 / \tau$.
+
+```{r effect_comp,fig.align="center",fig.height=4,fig.width=7}
+
+vennSets = list(
+  "EBV.dRdZ only" = c("100"),
+  "EBV only" = c("010"),
+  "EBV- only" = c("001"),
+  "EBV.dRdZ" = c("100","101","110","111"),
+  "EBV or EBV.dRdZ" = c("100","010","110","101","011","111"),
+  "Intersection" = c("111")
+)
+
+rename_mat = function(x,nm)
+{
+  names(x) = c("ensembl_id",nm)
+  x
+}
+
+fit_linear_models = function(subsets,venn,res1_mat,res2_mat,common_mat,col)
+{
+  genes = subsets %>%
+    map(.f = function(x)venn@IntersectionSets[[x]]) %>% {do.call(c,.)}
+
+  common_mat = common_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("X")
+  res1_mat = res1_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Y")
+  res2_mat = res2_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Z")
+
+  data = common_mat %>% 
+    inner_join(res1_mat,by = "ensembl_id") %>% 
+    inner_join(res2_mat,by = "ensembl_id") %>% 
+    filter(ensembl_id %in% genes) %>% 
+    mutate_if(is.numeric,funs(log(1 + .)))
+
+  models = list()
+  models[["Z"]] = lm(Z ~ X, data = data)
+  models[["Y"]] = lm(Y ~ X, data  = data)
+  
+  models
+
+}
+
+two_models_list = vennSets %>%
+  map(fit_linear_models,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+ 
+compare_coeff = function(two_models)
+{
+  est_param = two_models %>%
+    map(tidy) %>%
+    map2(names(two_models),
+         .f = function(x,y)x %>% mutate(name = y))
+
+  summaries = two_models %>%
+    map(glance) %>%
+    map2(names(two_models),
+         .f = function(x,y)x %>% mutate(name = y))
+
+  est_param %>%
+    map2(summaries,left_join,by =  "name") %>%
+    bind_rows()
+
+}
+
+do_comparison = function(models)
+{
+  models %>% 
+  map(compare_coeff) %>% 
+  map2(names(.),
+       .f = function(x,y)
+         x %>% mutate(model = y)) %>% 
+  bind_rows()
+
+}
+
+comparison = do_comparison(two_models_list)
+
+plot_coeff = function(comparison)
+{
+  comparison %>% 
+    filter(term == "X") %>% 
+    mutate(
+      coeff = estimate / sigma,
+      name = ifelse(name == "Y","EBV","EBV.dRdZ"),
+      model = factor(model,levels  = names(vennSets))
+      ) %>% 
+    select(
+      name,coeff,model
+      ) %>% 
+    ggplot(aes(name,coeff,fill = name))+
+    geom_bar(stat = "identity",colour = "black")+
+    scale_fill_brewer(palette = "Pastel1")+
+    facet_wrap( ~ model, nrow = 2)+
+    theme(
+      legend.position = "none"  ,
+      axis.title.x = element_blank()
+      )+
+    ylab("Standarized coeff")
+}
+
+plot_coeff(comparison)+ggtitle("Diff. expressed genes")
+
+```
+
+```{r no_treat_comp,fig.align="center",fig.height=4,fig.width=7}
+
+vennSets %>%
+  map(fit_linear_models,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg") %>% 
+  do_comparison() %>% 
+  plot_coeff()+ggtitle("Diff. expressed genes / no treatment")
+
+
+```
+
+#### Model comparison for Up/down regulated genes
+
+We repeated the previous analysis, using only the up/down regulated genes to build the gene sets. This is a bit tricky, because there are genes that are not differentially expressed
+
+```{r up_down}
+
+UP_two_models_list = vennSets %>%
+  map(fit_linear_models,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+DO_two_models_list = vennSets %>%
+  map(fit_linear_models,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+UP_comp = do_comparison(UP_two_models_list)
+DO_comp = do_comparison(DO_two_models_list)
+
+```
+
+```{r up_effect,fig.align="center",fig.height=4,fig.width=7}
+
+plot_coeff(UP_comp)+ggtitle("Up-regulated coefficients")
+
+```
+
+```{r down_effect_notreat,fig.align="center",fig.height=4,fig.width=7,message=FALSE,warning=FALSE}
+
+vennSets %>% 
+  map(fit_linear_models,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg") %>% 
+  do_comparison() %>% 
+  plot_coeff()+ggtitle("Up-regulated coeff. / no treatment")
+
+```
+
+
+```{r do_effect,fig.align="center",fig.height=4,fig.width=7}
+
+plot_coeff(DO_comp)+ggtitle("Down-regulated coefficients")
+
+```
+
+```{r up_effect_notreat,fig.align="center",fig.height=4,fig.width=7,message=FALSE,warning=FALSE}
+
+vennSets %>% 
+  map(fit_linear_models,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg") %>% 
+  do_comparison() %>% 
+  plot_coeff()+ggtitle("Down-regulated coeff. / no treatment")
+
+```
+
+# Same intercept, same variance models
+
+The idea is to do a similar model, to the one before but using same variance and same intercept:
+
+$$
+\begin{align}
+Z_i &= \gamma + \alpha X_i + \varepsilon_i,\quad \varepsilon_i \sim N(0,\sigma^2) \\
+Y_i &= \gamma + \beta X_i + \tilde{\varepsilon}_i,\quad \tilde{\varepsilon}_i \sim N(0,\sigma^2) 
+\end{align}
+$$
+
+
+```{r alter_model}
+
+fit_linear_models_same_int = function(subsets,venn,res1_mat,res2_mat,common_mat,col)
+{
+  genes = subsets %>%
+    map(.f = function(x)venn@IntersectionSets[[x]]) %>% {do.call(c,.)}
+
+  common_mat = common_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("X")
+  res1_mat = res1_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Y")
+  res2_mat = res2_mat %>% select_(.dots = c("ensembl_id",col)) %>% 
+    rename_mat("Z")
+
+  data = common_mat %>% 
+    inner_join(res1_mat,by = "ensembl_id") %>% 
+    inner_join(res2_mat,by = "ensembl_id") %>% 
+    filter(ensembl_id %in% genes) %>% 
+    mutate_if(is.numeric,funs(log(1 + .)))
+  
+  zero = rep(0,nrow(data))
+  data = tibble(
+    response = c(data$Y,data$Z),
+    Y = c(data$X,zero),
+    Z = c(zero,data$X)
+  )
+  
+  lm(response ~ . , data = data)
+  
+}
+
+plot_coeff2 = function(model_list)
+{
+  ll = 
+    list(
+      nms = model_list %>% 
+        names(),
+      tidy = model_list %>% 
+        map(tidy),
+      glance = model_list %>% 
+        map(glance)
+      ) %>%
+    pmap(.f = function(nms,tidy,glance){
+      left_join(
+        tidy %>% 
+          mutate(
+            model = nms
+            ),
+        glance %>% 
+          mutate(
+            model = nms
+            ),
+        by = "model")}) %>%
+    bind_rows() %>% 
+    mutate(
+      norm.coeff = estimate / sigma
+      ) %>% 
+    filter(term %in% c("Y","Z")) %>% 
+    mutate(
+      term = ifelse(term == "Y","EBV","EBV.dRdZ")
+      )
+  
+  ll %>% 
+    ggplot(aes(term,norm.coeff,fill = term))+
+    geom_bar(stat = "identity",colour = "black")+
+    scale_fill_brewer(palette = "Pastel1")+
+    facet_wrap( ~ model, nrow = 2)+
+    theme(
+      legend.position = "none"  ,
+      axis.title.x = element_blank()
+      )+
+    ylab("Standarized coeff")+ylim(0,bl)
+}
+
+model_list = vennSets %>% 
+  map(fit_linear_models_same_int,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+model_list_no = vennSets %>% 
+  map(fit_linear_models_same_int,
+      venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg")
+
+UP_model_list = vennSets %>% 
+  map(fit_linear_models_same_int,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+UP_model_list_no = vennSets %>% 
+  map(fit_linear_models_same_int,
+      up_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg")
+
+DO_model_list = vennSets %>% 
+  map(fit_linear_models_same_int,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "treat_avg")
+
+DO_model_list_no = vennSets %>% 
+  map(fit_linear_models_same_int,
+      down_venn,
+      res1_mat = summary_matrices[["EBV_Scott"]],
+      res2_mat = summary_matrices[["EBV_dRdZ"]],
+      common_mat = summary_matrices[["NOKS_Scott"]],
+      "notreat_avg")
+
+
+```
+
+```{r same_models,fig.align="center",fig.width=7,fig.height=4,warning=FALSE,message=FALSE}
+
+bl = 3.5
+model_list %>% plot_coeff2()+ggtitle("All Diff. Expr. Genes")
+
+```
+
+```{r same_models_no,fig.align="center",fig.width=7,fig.height=4,warning=FALSE,message=FALSE}
+
+model_list_no %>% plot_coeff2()+ggtitle("All Diff. Expr. Genes / no treatment")
+
+```
+
+#### Same intercept model comparison for Up / down regulated genes
+
+```{r UP_same_models,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+UP_model_list %>% plot_coeff2()+ggtitle("Up regulated genes ")
+```
+
+```{r UP_same_models_no,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+UP_model_list_no %>% plot_coeff2()+ggtitle("Up regulated genes / no treatment")
+```
+
+```{r DOWN_same_models,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+DO_model_list %>% plot_coeff2()+ggtitle("Down regulated genes ")
+```
+
+
+```{r DOWN_same_models_no,warning=FALSE,message=FALSE,fig.align="center",fig.width=7,fig.height=4}
+alpha = .05
+DO_model_list_no %>% plot_coeff2()+ggtitle("Down regulated genes / no treatment")
+```
+
+We then, calculate `r 100* (1 - alpha / 2)`% confidence intervals:
+
+```{r conf_int,message=FALSE,warning=FALSE}
+
+library(Matrix)
+library(DT)
+
+conf_intervals_same_int = function(model,alpha = .05)
+{
+  
+  data = model %>% 
+    augment() %>% 
+    as_tibble()
+  
+  mat = data %>% 
+    select(Y,Z) %>% as.matrix() %>% 
+    {cbind(1,.)} %>% Matrix()
+
+  Vinv = t(mat) %*% mat %>% 
+    solve()
+  
+  u = Matrix(c(0,1,-1))
+  C = t(u) %*% Vinv %*% u %>%
+    as.numeric()
+  
+  z = qnorm(1 - alpha / 2 )
+  
+  est = model %>% 
+    tidy() %>% {.$estimate}
+  
+  d = est[2] - est[3]
+  
+  s = model %>% 
+    glance() %>% 
+    {.$sigma}
+  
+  marg = z  * sqrt(C)
+  
+  c(d/s,d/s - marg, d/s + marg)
+  
+}
+
+
+
+conf_int = list(
+  "all_treat" = model_list,
+  "all_treat_no" = model_list_no,
+  "up_treat" = UP_model_list,
+  "up_treat_no" = UP_model_list_no,
+  "down_treat" = DO_model_list,
+  "down_treat_no" = DO_model_list_no
+) %>% 
+  map(.f = function(x){
+    nms = names(x)
+    out = x %>% 
+      map(conf_intervals_same_int,alpha) %>% 
+      bind_rows() %>% 
+      t() %>% as_tibble() %>% 
+      mutate(Model = nms) %>% 
+      select(Model,everything()) %>% 
+      mutate_if(is.numeric,funs(round(.,4)))
+    names(out) = c("Model","Std. Diff.","lower","upper")
+    out
+  }) 
+
+  conf_int %>% 
+    map2(names(.),.f = function(x,y)x %>% mutate(Comp = y)) %>% 
+    bind_rows( ) %>% 
+    select(Comp,everything()) %>% 
+    datatable(options = list(pageLength = 6)) %>% 
+    formatStyle(columns = "Std. Diff.",color = styleInterval(0,c("red","blue"))) %>% 
+    formatStyle(columns = "lower",color = styleInterval(0,c("red","blue"))) %>% 
+    formatStyle(columns = "upper",color = styleInterval(0,c("red","blue")))
+
+
+```
