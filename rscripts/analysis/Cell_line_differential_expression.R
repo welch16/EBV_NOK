@@ -95,6 +95,13 @@ strain_results = strain_results %>%
     map(separate,row,into = c("ENSEMBL_ID","GENE_ID"),sep = "\\_")
 
 
+outdr = "./data/Diff.Genes/hg19/DESeq2_strain"
+
+strain_results %>%
+    map2(
+        names(.),
+        .f = function(res,nm){
+            write_tsv(res, file.path(outdr,paste0(nm,"_diff_genes.tsv")))})
 
 
 ## plot
