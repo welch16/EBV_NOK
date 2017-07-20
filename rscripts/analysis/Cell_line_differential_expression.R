@@ -68,6 +68,11 @@ strain_results = list(
                                    contrast = c("strain","EBV","NOKS"),
                                    tidy = TRUE,
                                    parallel = TRUE),
+    ## dRdZ vs EBV
+    "strain:dRdZ_vs_EBV" = results(DDmodel1,cooksCutoff = FALSE,
+                                   contrast = c("strain","dRdZ","EBV"),
+                                   tidy = TRUE,
+                                   parallel = TRUE),
     ## dRdZ vs NOKS when treat = methyl
     "methyl:dRdZ_vs_NOKS" = results(DDmodel2,cooksCutoff = FALSE,
                                     contrast = c("interac","dRdZ_methyl","NOKS_methyl"),
@@ -78,6 +83,10 @@ strain_results = list(
                                    contrast = c("interac","EBV_methyl","NOKS_methyl"),
                                    tidy = TRUE,
                                    parallel = TRUE),
+    ## dRdZ vs EBV when treat = methyl
+    "methyl:dRdZ_vs_EBV" = results(DDmodel2,cooksCutoff = FALSE,
+                                   contrast = c("interac","dRdZ_methyl","EBV_methyl"),
+                                   tidy = TRUE),
     ## dRdZ vs NOKS without treatment
     "mono:dRdZ_vs_NOKS" = results(DDmodel2,cooksCutoff = FALSE,
                                   contrast = c("interac","dRdZ_mono","NOKS_mono"),
@@ -86,6 +95,11 @@ strain_results = list(
     ## EBV vs NOKS without treatment
     "mono:EBV_vs_NOKS" = results(DDmodel2,cooksCutoff = FALSE,
                                  contrast = c("interac","EBV_mono","NOKS_mono"),
+                                 tidy = TRUE,
+                                 parallel = TRUE),
+    ## dRdZ vs EBV without treatment
+    "mono:dRdZ_vs_EBV" = results(DDmodel2,cooksCutoff = FALSE,
+                                 contrast = c("interac","dRdZ_mono","EBV_mono"),
                                  tidy = TRUE,
                                  parallel = TRUE))
 
