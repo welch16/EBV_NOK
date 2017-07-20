@@ -55,4 +55,4 @@ colnames(tpmmat) = c("genes",gsub(".genes.results","",basename(opt$all_files)))
 
 tpmmat = tpmmat %>% separate(genes,into = c("ensembl_id","gene_id"), sep = "\\_")
 
-write_delim(tpmmat,path = opt$outfile)
+write_tsv(tpmmat,path = opt$outfile)
