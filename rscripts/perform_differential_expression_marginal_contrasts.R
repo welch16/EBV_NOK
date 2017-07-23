@@ -13,6 +13,8 @@ optList = list(
                 help = "Name of the outfile where the test results are saved."),
     make_option(c("-t","--type"),action = "store_true",default = "rsem",type = "character",
                 help = "Tool used to quantify transcripts. The default value is 'rsem'"),
+    make_option("--var",action = "store_true",default = "rep",type = "character",
+                help = "Variability level, could be 'rep','clone' or 'tech'"),
     make_option("--plot_title",action = "store_true",type = "character",
                 help = "Title used in plots"),
     make_option("--figs",action = "store_true",type = "character",default = "./Rplots",
@@ -23,19 +25,10 @@ optList = list(
 
 opt = parse_args(OptionParser(option_list = optList))
 
-## opt$mono_files = 'data/RSEM/hg19/RNAseq-noks-CaFBS-rep?.genes.results'
-## opt$treat_files = 'data/RSEM/hg19/RNAseq-akata-noks-CaFBS-rep?.genes.results'
-## opt$treatment = 'NOKS,EBV'
-
-## opt$mono_files = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
-## opt$treat_files = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
-## opt$plot_title = "Scott NOKS: MC vs mono"
-
-## opt$treat_files = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results"
-## opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"  
-
-## opt$cells = "NOK,EBV"
-## opt$treatments = "none,MC"  
+## opt$mono_files = "data/RSEM/hg19/RNAseq-akata-noks-no_treatment-clone?.genes.results"
+## opt$treat_files = "data/RSEM/hg19/RNAseq-akata-noks-methyl_cell-clone?.genes.results"
+## opt$treatment = "none,MC"
+## opt$var = "clone"
 
 library(base,quietly = TRUE)
 library(tidyverse,quietly = TRUE)
@@ -62,8 +55,11 @@ source("rfuns/geneExpression_analysis.R")
 treat = opt$treatment %>% strsplit(",") %>% unlist
 
 
-names(opt$mono_files) = strsplit(opt$mono_files,"rep") %>% map_chr(.f = function(x)x[2]) %>% {paste0(treat[1],"-",gsub(".genes.results","",.))}
-names(opt$treat_files) = strsplit(opt$treat_files,"rep") %>% map_chr(.f = function(x)x[2]) %>% {paste0(treat[2],"-",gsub(".genes.results","",.))}
+names(opt$mono_files) = strsplit(opt$mono_files,opt$var) %>%
+    map_chr(.f = function(x)x[2]) %>% {paste0(treat[1],"-",gsub(".genes.results","",.))}
+
+names(opt$treat_files) = strsplit(opt$treat_files,opt$var) %>%
+    map_chr(.f = function(x)x[2]) %>% {paste0(treat[2],"-",gsub(".genes.results","",.))}
 
 stopifnot(all(file.exists(opt$mono_files)),
           all(file.exists(opt$treat_files)))
@@ -94,7 +90,8 @@ deseq = deseq[rowSums(counts(deseq)) > 1,]
 ## 
 deseqModel = DESeq(deseq,minReplicatesForReplace = Inf)
 
-my_results = results(deseqModel,cooksCutoff = FALSE,tidy = TRUE) %>% as.tbl %>%
+my_results = results(deseqModel,cooksCutoff = FALSE,tidy = TRUE) %>%
+    as.tbl() %>%
     separate(row,into = c("ensembl_id","gene_id"),sep = "\\_")
 
 write_delim(my_results,opt$outfile,delim = "\t")
