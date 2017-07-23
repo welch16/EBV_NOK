@@ -29,7 +29,12 @@ all:$(file1) $(file2) $(file3) $(file4)
 
 # Diff expression analysis with DESeq2
 dRdZ_analysis:$(file1) $(file2) $(file3) $(file4)
-	$(RDR)/perform_differential_expression_marginal_contrasts.R --mono_files "$(DATADR)/RSEM/hg19/RNAseq-akata-noks-no_treatment-clone?.genes.results" --treat_files "$(DATADR)/RSEM/hg19/RNAseq-akata-noks-methyl_cell-clone?.genes.results" --treatment 'none,MC' --outfile $(DATADR)/Diff.Genes/hg19/DESeq2_marginal/dRdZ_MC_diff_genes_EBV.tsv --var 'clone' --plot_title 'dRdZ : MC vs No treatment' --figs $(FIGSDR)/dRdZ_EBV
+	$(RDR)/perform_differential_expression_marginal_contrasts.R \
+            --mono_files "$(DATADR)/RSEM/hg19/RNAseq-akata-noks-no_treatment-clone?.genes.results" \
+            --treat_files "$(DATADR)/RSEM/hg19/RNAseq-akata-noks-methyl_cell-clone?.genes.results" \
+            --treatment 'none,MC' \
+            --outfile $(DATADR)/Diff.Genes/hg19/DESeq2_marginal/dRdZ_MC_diff_genes_EBV.tsv \
+            --var 'clone' --plot_title 'dRdZ : MC vs No treatment' --figs $(FIGSDR)/dRdZ_EBV
 
 $(DATADR)/metadata/dRdZ_TPM_matrix.tsv:$(file1) $(file2) $(file3) $(file4)
 	$(RDR)/create_TPM_matrix.R --all_files "$(DATADR)/RSEM/hg19/RNAseq-akata-noks-*clone*.genes.results" --outfile $@
