@@ -1,0 +1,255 @@
+---
+title: "EBV differential expression analysis with DESeq2"
+output:
+  html_notebook: default
+  html_document: default
+---
+
+# Introduction
+
+The key question to explore is to understand how does dRdZ affects differentiation compared to how does EBV affects differentiation. 
+
+```{r libraries,include=FALSE,echo=FALSE,eval=TRUE}
+
+  knitr::opts_chunk$set(echo = FALSE,
+                        eval = TRUE,
+                        message = FALSE,
+                        warning = FALSE)
+
+  library(tidyverse)
+  library(DESeq2)
+  library(viridis)
+  library(grid)
+  library(gridExtra)
+  library(scales)
+  library(Vennerable)
+  library(broom)
+
+  theme_set(theme_bw() + theme(legend.position = "top"))
+
+```
+
+## Brief explanation of the design
+
+We have 3 diff. cell lines: EBV, EBV- (NOKS) and EBV-dRdZ and for all of them we tested which genes are differentially expressed by applying a MC treatment, i.e. in total we have 9 different combinations between cell lines and treatments applied. The EBV and EBV- samples were generated independently twice by two labs. 
+
+```{r load_data,warning=FALSE,message=FALSE,warning=FALSE}
+
+  all_files = list.files("..",recursive = TRUE,pattern = "tsv",full.names = TRUE)
+
+  deseq2_files = "../data/Diff.Genes/hg19/DESeq2_strain" %>% 
+    list.files(full.names = TRUE,recursive = TRUE)
+
+  tpm_mat_files = all_files %>% 
+          {.[grep("TPM",.)]}
+  tpm_matrices = tpm_mat_files %>% 
+          map2( c(" ","\t"),.f = function(x,y)read_delim(x,y))
+
+```
+
+```{r clean_data,warning=FALSE,message=FALSE}
+
+## Both TPM matrices have different formats in columns and such. 
+
+des1 = tibble(col = colnames(tpm_matrices[[1]][,-(1:2)])) %>% 
+  mutate(
+    cell = ifelse(grepl("akata",col),"EBV_dRdZ","EBV-"),
+    treat = ifelse(grepl("meth",col),"MC","no"),
+    rep = ifelse(grepl(1,col),1,2),
+    lab = "Johannsen"
+  )
+
+des2 = tibble(col = colnames(tpm_matrices[[2]][,-c(1:2)])) %>% 
+  separate(col , into = c("lab","cell","treat","rep"),sep = "\\.",remove = FALSE) %>% 
+  mutate(
+    cell = ifelse(cell == "EBV","EBV","EBV-"),
+    treat = ifelse(treat == "NoTr","no",treat),
+    rep = gsub("Rep","",rep) %>% as.numeric(),
+    lab = ifelse(lab == "Ben","Johannsen","Scott")
+  ) %>% 
+  select(col,cell,treat,rep,lab)
+
+tpm_matrices[[2]] = tpm_matrices[[2]] %>% 
+  select(-contains("transcrip")) %>% 
+  separate(gene_id,into = c("ensembl_id","gene_id"),sep = "\\_")
+
+create_matrix = function(base,key_treat,key_no)
+{
+  base %>% 
+    mutate(
+      treat_avg = base %>% 
+        select(contains(key_treat)) %>% 
+        rowMeans(),
+      notreat_avg = base %>% 
+        select(contains(key_no)) %>% 
+        rowMeans(),
+      log2FC = log2((1 + treat_avg) / (1 + notreat_avg))
+    ) %>% 
+    select(
+      ensembl_id,
+      gene_id,
+      treat_avg,
+      notreat_avg,
+      log2FC
+    )
+}
+
+
+summary_matrices = list()
+summary_matrices[["EBV_dRdZ"]] = create_matrix(
+  tpm_matrices[[1]],"meth","no_tr"
+)
+summary_matrices[["EBV_Ben"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Ben.EBV")),"MC","NoTr"
+)
+summary_matrices[["NOKS_Ben"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Ben.NOKS")),"MC","NoTr"
+)
+summary_matrices[["EBV_Scott"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Scott.EBV")),"MC","NoTr"
+)
+summary_matrices[["NOKS_Scott"]] = create_matrix(
+  tpm_matrices[[2]] %>% 
+    select(ensembl_id,gene_id,contains("Scott.NOKS")),"MC","NoTr"
+)
+
+```
+
+## log2FC scatter plot between the 3 strains:
+
+```{r log2FC_scatter,message=FALSE,warning=FALSE,fig.align="center",fig.width=7,fig.height=8}
+
+  create_scatter_component <- function(summary_matrices,x_axis,y_axis,var,minL = 0,maxL = -minL,nbins = 40)
+  {
+    pal = viridis(1e3, option = "D") 
+    nms = names(summary_matrices)
+    names(nms) = nms
+    summary_matrices[c(x_axis,y_axis)] %>% 
+      map(select_,.dots = c("ensembl_id",var)) %>% 
+    {inner_join(.[[1]],.[[2]],by = "ensembl_id")} %>% 
+    ggplot(aes_string(x = paste0(var,".x"),y = paste0(var,".y")))+
+    stat_binhex(bins = nbins) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barwidth = unit(0.4,"npc"),
+                           barheight = unit(0.01,"npc")))+
+      
+    xlim(minL,maxL)+ ylim(minL,maxL)+
+    geom_abline(slope = 1,intercept = 0,linetype = 2,colour = "red")+
+    xlab(nms[x_axis])+ylab(nms[y_axis])+coord_fixed()
+    
+  }  
+
+  ll = 8
+  nbins = 40
+
+  plots = list()
+  plots[[1]] = create_scatter_component(summary_matrices,5,4,"log2FC",minL = -ll,nbins = nbins)+
+    xlab("EBV- log2FC")+ylab("EBV log2FC")
+  plots[[2]] = create_scatter_component(summary_matrices,1,4,"log2FC",minL = -ll,nbins = nbins)+
+    xlab("EBV.dRdZ log2FC")+ylab("EBV log2FC")
+  plots[[3]] = create_scatter_component(summary_matrices,1,5,"log2FC",minL = -ll,nbins = nbins)+
+    xlab("EBV.dRdZ log2FC")+ylab("EBV- log2FC")
+  
+  grid.arrange(plots[[1]],
+               plots[[2]],
+               ggplot()+theme(panel.border = element_blank()),plots[[3]],nrow = 2)
+  
+  
+
+```
+
+There is not obvious pattern in the **log2FC** figures above. In general seems, that the EBV.dRdZ is some sort of mixture between the EBV and EBV- strains. Then, we used `DESeq2` to estimate which genes are differentially expressed. For each gene, we used a model of the form:
+
+$$
+Y_{ijk} = \mu + \alpha_i + \beta_j + \gamma_{ij} 
+$$
+
+where:
+
+  * $\alpha_i$ is the effect for the $i$th cell, among `EBV`, `EBV-` (`NOKS`) and `EBV.dRdZ`.
+  
+  * $\beta_j$ is the treatment effect between `no_treatment` and `methyl_cel`.
+  
+  * $\gamma_{ij}$ is the interaction term between strain and treatment.
+  
+  * $Y_{ijk}$ are the counts for the $k$th replicate of sample with strain $i$ and treatment $j$. 
+
+## Hypothesis tested
+
+Using this framework, we tested diff. expression by strain:
+
+* Effect between EBV and EBV-
+      
+* Effect between EBV.dRdZ and EBV-
+
+* Effect between EBV.dRdZ and EBV
+
+We repeated those 3 contrasts using both treated and untreated samples together (`prefix = strain`), only the treated samples (`prefix = methyl`) and only the untreated samples (`prefix = mono`).
+
+```{r read_deseq2_results,message=FALSE,warning=FALSE}
+
+  de_list = deseq2_files %>% 
+        map(read_tsv)
+  names(de_list) = gsub("_diff_genes.tsv","",basename(deseq2_files))
+
+  de_genes = de_list %>% 
+    map(arrange,stat) %>% 
+    map(~ mutate(.,rank = seq_len(nrow(.)))) %>% 
+    map2(names(.), ~ mutate(.x , model = .y)) %>% 
+    bind_rows() %>%
+    separate(model,into = c("Treat","Hypothesis"),sep = ":",remove = FALSE) %>% 
+    mutate(Treat = ifelse(Treat == "strain","All",Treat),
+           Treat = factor(Treat,levels = c("All","mono","methyl")))
+    
+```
+
+## P.value histograms
+
+```{r pval_hist,message=FALSE,warning=FALSE,fig.align="center",fig.width=8,fig.height=6}
+
+  de_genes %>% 
+    ggplot(aes(pvalue))+
+    geom_histogram(fill = "white",colour = "black",bins = 25)+
+    facet_grid(Hypothesis ~ Treat,scales = "free_y" )+xlim(-.05,1.05)
+
+
+```
+
+* Lets recall that we want to observe a big spike next to zero, and uniform like behaviour between 0 and 1. This means that for the third row hypothesis under this model can be trusted. I think this may be ocurring due to including the EBV.dRdZ in the analysis, the EBV- methyl samples are more alike to the EBV methyl that to those (show PCA plot).
+
+## Volcano plots
+
+```{r volcano_plots,message=FALSE,warning=FALSE,fig.align="center",fig.width=7,fig.height=8}
+
+  FDR = 1e-6
+
+  de_genes %>% 
+    mutate(diff_exp = if_else(padj <= FDR,"yes","no","no")) %>% 
+    ggplot(aes(log2FoldChange,-log10(pvalue),colour = diff_exp))+
+    geom_point(alpha = I(1/2))+
+    facet_grid(Hypothesis ~ Treat)+
+    scale_color_brewer(palette = "Set1",name = paste("padj","<=",FDR))+
+    scale_y_continuous(limits = c(0,35))+
+    xlim(-10,10)
+
+```
+
+* Here we can see how our observations of the p.value histograms translate into the volcano plots, the histograms without the spike at the firsts bins are the ones who are detecting less differentially expressed genes.
+
+A few observations of the heatmaps / pca analysis:
+
+1. Both EBV dRdZ samples seem to be very similar regardless of treatment
+
+2. They seem to be the most different to both EBV and EBV- when MC treatment is applied.
+
+3. And most similar to EBV without any treatment, it is possible to say that the dRdZ samples are different from the NOKS without treatment samples, but we need to keep in mind that the variance explained by the second component is around 10% compared against the 75% variance explained by the first one.
+
+
+
+
+
