@@ -25,7 +25,7 @@ reads = as(reads,"GRanges")
 
 ## removing chrM as we never use it 
 lvs = seqlevelsInUse(reads)
-seqlevels(reads,force = TRUE) = lvs[lvs != "chrM"]
+seqlevels(reads,pruning.mode = "coarse") = lvs[lvs != "chrM"]
 
 ## resizing reads by fraglen and normalizing the coverage
 if(!is.null(opt$fraglen)){
