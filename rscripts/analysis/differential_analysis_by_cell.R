@@ -18,24 +18,27 @@ optList = list(
     make_option("--treats",action = "store_true",type = "character",default = "no,yes",
                 help = "Names of the two treatments separated by ','.
                         The default values are 'no,yes'"),
-    make_option("--iso",action = "store_true",type = "logical",default = FALSE,
+    make_option(c("-i","--iso"),action = "store_true",type = "logical",default = FALSE,
                 help = "Flag indicating if the analysis is made at gene or isoform levels"),
     make_option("--tpm_file",action = "store_true",type = "character",
                 default = "data/TPM_matrices/Genes_TPM_matrix.tsv",
                 help = "File with the TPM values for each gene / isoform and replicate"),
-    make_option("--outfile", action = "store_true",default = tempfile(),type = "character",
-                help = "Name of the outfile where the test results are saved.")
+    make_option("--out_file_suff", action = "store_true",default = tempfile(),type = "character",
+                help = "Suffix of the files where the test results are saved.")
 )
 
 opt = parse_args(OptionParser(option_list = optList))
 
-opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
-opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results"
-opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
-opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"  
+## opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
+## opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results"
+## opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
+## opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"  
 
-opt$cells = "NOK,EBV"
-opt$treatments = "none,MC"  
+## ## opt$iso = TRUE
+## ## opt$tpm_file = "data/TPM_matrices/Isoforms_TPM_matrix.tsv"
+
+## opt$cells = "NOK,EBV"
+## opt$treatments = "none,MC"  
 
 library(base,quietly = TRUE)
 library(tidyverse,quietly = TRUE)
@@ -81,7 +84,7 @@ txdata = tximport(all_files,
 tpm_mat = read_tsv(opt$tpm_file)
 
 if(opt$iso){                            # isoform level
-    txtdata[1:3] = txdata[1:3] %>%
+    txdata[1:3] = txdata[1:3] %>%
     map( ~ {
             rownames(.) = tpm_mat$transcript_id
         .
@@ -117,7 +120,7 @@ rownames(coldata) = names(all_files)
 library(DESeq2,quietly = TRUE)
 library(BiocParallel,quietly = TRUE)
 
-options(mc.cores = 12)
+options(mc.cores = 20)
 
 deseq_analysis <- function(txdata,coldata)
 {
@@ -176,178 +179,94 @@ coldata = coldata %>%
             strsplit("\\.") %>%
             map_chr( ~.[1]))
 
-get_ave_tpm_rank <- function(tpm_mat,col,samples,coldata)
+get_mean_tpm <- function(col,samples,tpm_mat,coldata,
+                         varname = paste("rank_mean_tpm",samples,sep = ":"))
 {
-    browser()
+    var = coldata %>%
+        filter("["(.,col) == samples ) %>%
+        select(cols) %>% .[[1]]
 
+    tpm_mat %>%
+        select(contains("id")) %>%
+        mutate(
+            !!varname  := tpm_mat[,var] %>%
+                rowMeans()
+            )
 
 }
 
-#%>% strsplit("_") %>% sapply(function(x)x[2])
+summary_B = c(cells[2],paste(cells[2],treats,sep = "_"))
+summary_A = c(cells[1],paste(cells[1],treats,sep = "_"))
 
-clean_results <- function(res, genes)
-{   
-    res %>% as.data.frame %>%
-        as.tbl %>% mutate(gene = genes) %>%
-        select(gene,everything())
-}
+mean_tpm_B = map2(
+    c("cell",rep("interac",2)),
+    summary_B,
+    get_mean_tpm,
+    tpm_mat,coldata)
+names(mean_tpm_B) = summary_B
 
-my_results_DF = my_results %>% map(clean_results,genes)
+mean_tpm_A = map2(
+    c("cell",rep("interac",2)),
+    summary_A,
+    get_mean_tpm,
+    tpm_mat,coldata)
+names(mean_tpm_A) = summary_A
 
-
-rename_cols <- function(x,label)
+clean_results <- function(res,summ_B,summ_A,iso )
 {
-    nms = names(x)
-    nms[nms != "gene"] = paste(label, nms[nms != "gene"],sep = ":")
-    names(x) = nms
-    x    
-}
+    nms_A = summ_A %>%
+        select(-contains("id")) %>%
+        names()
 
-my_results_DF = my_results_DF %>% map2(names(my_results_DF),rename_cols)
+    nms_B = summ_B %>%
+        select(-contains("id")) %>%
+        names()
 
+    summ = inner_join(summ_B,summ_A,
+                      by = summ_A %>%
+                          select(contains("id")) %>%
+                          names())    
+    if(iso){
+        
+        out = res %>%
+            dplyr::rename(transcript_id = row) %>%
+            left_join(summ, by = "transcript_id") %>%
+            select(contains("id"),everything()) 
+            
 
-my_results = Reduce(function(...) merge(..., by='gene', all.x=TRUE),my_results_DF) %>% as.tbl
+    }else{
 
-write_delim(my_results,opt$outfile,delim = "\t")
-
-## plot
-
-pvalue_histogram <- function(mod,my_results)
-{
-    dd = my_results %>% select(gene,contains(mod))
-
-    if(mod %in% c("cell","treat")){
-        dd = dd[,1:7]
+        out = res %>%
+            dplyr::rename(gene_id = row) %>%
+            left_join(summ,by = "gene_id") %>%
+            select(contains("id"),everything())
+   
     }
 
-    dd = dd %>%
-        select(gene,contains("pvalue"))
-    names(dd) = c("gene","pvalue")
+    out %>%
+        mutate_at(
+            .vars = vars(nms_B,nms_A),
+            .funs = funs(
+                dense_rank(desc(.))
+            ) )  %>%
+        mutate(
+            baseMean = NULL) %>%
+        dplyr::rename(
+            log2FC = log2FoldChange,
+            log2FC_se = lfcSE)
+            
+  
+}    
 
-    dd %>% ggplot(aes(pvalue)) +
-        geom_histogram(bins = 50,colour = "blue",fill = "white",boundary = 0) +
-        ggtitle(mod)
+out_results = pmap(
+    list(
+        test_results,
+        mean_tpm_B,
+        mean_tpm_A),
+     clean_results,opt$iso)
 
-}
-
-
-pdf(paste0(opt$figs,"_pvalue_histograms.pdf"),height = 5)
-plots = lapply(models,pvalue_histogram,my_results)
-u = lapply(plots,print)
-dev.off()
-
-volcano_plot <- function(mod,my_results,fdr = opt$fdr)
-{
-    nms = c("gene","log2FoldChange","pvalue","padj")
-    dd = my_results %>% select(gene,contains(mod))
-
-    if( mod %in% c("cell","treat")){
-        dd = dd[,1:7]
-    }
-
-    dd = dd %>%
-        select(gene,contains("Fold"),contains("pval"),contains("padj") )
-    names(dd) = nms
-
-    
-
-    dd = dd %>% mutate(col = ifelse(padj <= fdr,"yes","no")) %>% filter(!is.na(padj))
-
-    mm = 1.3 * min(min(dd$log2FoldChange),max(dd$log2FoldChange)) %>% abs
-
-    dd %>% ggplot(aes(log2FoldChange,-log10(pvalue),colour = col))+geom_point()+
-        scale_colour_brewer(name = paste("adjusted pval <=",fdr),palette = "Set1")+
-        theme(legend.position = "top")+ggtitle(mod)+xlim(-mm,mm)+
-        geom_vline(xintercept = 0,linetype = 2)
-
-
-}
-
-pdf(paste0(opt$figs,"_volcano_plots.pdf"))
-plots = lapply(models,volcano_plot,my_results,fdr = 1e-5)
-u = lapply(plots,print)
-dev.off()
-
-signal2noise_barplot <- function(mod,my_results)
-{    
-
-    dd = my_results %>% select(gene,contains(mod))
-
-    if(mod %in% c("cell","treat")){
-        dd = dd[,1:7]
-    }
-
-    names(dd) = gsub(paste0(mod,":"),"",names(dd) )
-
-    dd = dd %>% arrange(stat) %>%
-        mutate(gene = factor(gene,levels = gene),
-               rank = seq_len(nrow(dd)))
-
-    dd %>% ggplot(aes(rank,stat))+geom_line()+
-        ggtitle(mod)+geom_abline(slope = 0,intercept = 0,linetype = 2)
-}
-
-pdf(paste0(opt$figs,"_signal_to_noise_plot.pdf"))
-plots = lapply(models,signal2noise_barplot,my_results)
-u = lapply(plots,print)
-dev.off()
-
-
-rld = rlog(deseq_model1,blind = FALSE)
-
-pdf(paste0(opt$figs,"_PCA_analysis.pdf"))
-u = plotPCA(rld,intgroup = c("cell","treat"))
-print(u)
-dev.off()
-
-library(pheatmap)
-
-rowVars <- function (x,na.rm = TRUE)
-{
-    sqr = function(x) x * x
-    n = rowSums(!is.na(x))
-    n[n <= 1] = NA
-    return(rowSums(sqr(x - rowMeans(x,na.rm = na.rm)), na.rm = na.rm)/(n - 1))
-}
-
-
-mat = assay(rld)[,]
-mat = mat - rowMeans(mat)
-rownames(mat) = genes
-
-r = viridis::viridis(1e3,option = "D")
-
-K = 20
-topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,color = r,
-             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
-
-K = 50
-topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,color = r,
-             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
-
-K = 100
-topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
-             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
-
-K = 5e2
-topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
-             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
-
-K = 1e3
-topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
-             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
-
-K = 5e3
-topgenes = head(order(rowVars(assay(rld)),decreasing = TRUE),K)
-pheatmap(mat[topgenes,],annotation_col = coldata,show_rownames = FALSE,color = r,
-             filename = paste0(opt$figs,"_Heatmap_top",K,"genes.pdf"))
-
-
-
+out_results %>%
+    map2( names(.),
+         ~ write_tsv( .x , path = paste0(opt$out_file_suff,.y,".tsv")))
 
 
