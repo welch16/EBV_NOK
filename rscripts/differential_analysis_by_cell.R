@@ -18,8 +18,9 @@ optList = list(
     make_option("--treats",action = "store_true",type = "character",default = "no,yes",
                 help = "Names of the two treatments separated by ','.
                         The default values are 'no,yes'"),
-    make_option(c("-i","--iso"),action = "store_true",type = "logical",default = FALSE,
-                help = "Flag indicating if the analysis is made at gene or isoform levels"),
+    make_option(c("-i","--iso"),action = "store_true",type = "character",default = "gene",
+                help = "Flag indicating if the analysis is made at gene or isoform levels.
+                        Either 'gene' or 'isoform'"),
     make_option("--tpm_file",action = "store_true",type = "character",
                 default = "data/TPM_matrices/Genes_TPM_matrix.tsv",
                 help = "File with the TPM values for each gene / isoform and replicate"),
@@ -63,7 +64,7 @@ library(tximport,quietly = TRUE)
 source("rfuns/geneExpression_analysis.R")
 
 cells = opt$cells %>% strsplit(",") %>% unlist
-treats = opt$treatment %>% strsplit(",") %>% unlist
+treats = opt$treats %>% strsplit(",") %>% unlist
 
 names(opt$A_noTr) = getRep(opt$A_noTr,paste(cells[1],treats[1],sep = "_"))
 names(opt$B_noTr) = getRep(opt$B_noTr,paste(cells[2],treats[1],sep = "_"))
@@ -73,7 +74,10 @@ names(opt$B_Tr) = getRep(opt$B_Tr,paste(cells[2],treats[2],sep = "_"))
 stopifnot(all(file.exists(opt$A_noTr)),
           all(file.exists(opt$B_noTr)),
           all(file.exists(opt$A_Tr)),
-          all(file.exists(opt$B_Tr)))
+          all(file.exists(opt$B_Tr)),
+          opt$iso %in% c("gene","isoform"))
+
+opt$iso = opt$iso == "isoform"
 
 all_files = c(opt$A_noTr,opt$B_noTr,opt$A_Tr,opt$B_Tr)
 
