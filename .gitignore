@@ -2,5 +2,6 @@ data/*
 manuscript/logs/*
 notes/*
 figs/*
+reports/*
 .Rproj.user
 EBV_NOK.Rproj

@@ -30,17 +30,6 @@ optList = list(
 
 opt = parse_args(OptionParser(option_list = optList))
 
-## opt$A_noTr = "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results"
-## opt$B_noTr = "data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep2.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep3.genes.results,data/RSEM/hg19/RNAseq-Noks_EBV-mono-rep4.genes.results"
-## opt$A_Tr = "data/RSEM/hg19/RNAseq-Noks-MC-rep?.genes.results"
-## opt$B_Tr = "data/RSEM/hg19/RNAseq-Noks_EBV-MC-rep?.genes.results"  
-
-## ## opt$iso = TRUE
-## ## opt$tpm_file = "data/TPM_matrices/Isoforms_TPM_matrix.tsv"
-
-## opt$cells = "NOK,EBV"
-## opt$treatments = "none,MC"  
-
 library(base,quietly = TRUE)
 library(tidyverse,quietly = TRUE)
 
@@ -139,14 +128,17 @@ deseq_analysis <- function(txdata,coldata)
 
 deseq = deseq_analysis(txdata,coldata)
 
+message("Fitting main model...")
 model_1 = DESeq(deseq,minReplicatesForReplace = Inf,parallel = TRUE)
 
 design(deseq) <- ~ interac
 
+message("Fitting interactions model ...")
 model_2 = DESeq(deseq,minReplicatesForReplace = Inf ,parallel = TRUE)
 
 test = paste(cells,collapse = "_vs_")
 
+message("Contrasting hypothesis...")
 test_results = list()
 test_results[[paste(rev(cells),collapse = "_vs_")]] =
     results(model_1,
@@ -199,6 +191,7 @@ get_mean_tpm <- function(col,samples,tpm_mat,coldata,
 
 }
 
+message("Adding ranking variables...")
 summary_B = c(cells[2],paste(cells[2],treats,sep = "_"))
 summary_A = c(cells[1],paste(cells[1],treats,sep = "_"))
 
@@ -269,6 +262,7 @@ out_results = pmap(
         mean_tpm_A),
      clean_results,opt$iso)
 
+message("Saving results...")
 out_results %>%
     map2( names(.),
          ~ write_tsv( .x , path = paste0(opt$out_file_suff,.y,".tsv")))

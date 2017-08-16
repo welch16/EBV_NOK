@@ -1,0 +1,256 @@
+---
+title: "Comparison differentially expressed genes vs isoforms"
+author: Rene
+date: "`r format(Sys.time(), '%B %d %Y')`"
+output:
+  pdf_document
+params:
+  gene_file: "/path/to/gene_file"
+  iso_file: "/path/to/iso_file"
+  report_name: "gene_report"
+  test_name: "EBV_something"
+---
+
+```{r setup,include=FALSE}
+
+### chunk options
+knitr::opts_chunk$set(echo = FALSE,warning = FALSE)
+
+### libraries
+library(tidyverse)
+library(scales)
+library(viridis)
+
+### functions
+contingency_table <- function(padj_th,res_g,res_i)
+{
+    res_g = res_g %>%
+        mutate(
+            diff = if_else(padj <= padj_th,"yes","no","no"))
+
+    res_i = res_i %>%
+        mutate(
+            diff = if_else(padj <= padj_th,"yes","no","no"))
+
+
+    res_i %>%
+        group_by(gene_id) %>%
+        summarize(
+            diff = if_else(any(diff == "yes"),"yes","no")
+        ) %>%
+        inner_join(
+            res_g %>%
+            select(gene_id,diff),
+            by = "gene_id",suffix = c(".iso",".gene")) %>%
+        ungroup() %>%
+        select(contains("diff")) %>%
+        table()
+           
+}
+
+pval_histogram <- function(res_g , res_i)
+{
+
+    bind_rows(
+        res_g %>%
+        select(pvalue) %>%
+        mutate(lev = "genes"),
+        res_i %>%
+        select(pvalue) %>%
+        mutate(lev = "isoforms")) %>%
+        ggplot(aes(pvalue)) +
+        geom_histogram(fill = "white",colour = "blue",
+                       bins = 30,boundary = 0,
+                       aes( y = ..count.. /
+                                tapply(..count..,..PANEL..,sum)[..PANEL..]))+
+        facet_grid( . ~ lev)+
+        ylim(0,.2)+
+        ylab("Proportion")+
+        geom_abline(slope = 0,intercept = 0.025,colour = "red",linetype = 2)
+    
+
+}    
+
+
+```
+
+```{r load_data, cache=TRUE, include=FALSE}
+
+## files 
+gene_file = normalizePath(params$gene_file)
+iso_file = normalizePath(params$iso_file)
+
+genes = read_tsv(gene_file)
+iso = read_tsv(iso_file)
+test_name = as.character(params$test_name)
+
+padj_thr = c(1e-6,1e-5,1e-3)
+
+```
+
+# Test summary
+
+This report is for testing `r test_name`, we used the files:
+
+* `r gene_file %>% basename()`
+* `r iso_file %>% basename()`
+
+Both files contain almost the same information:
+
+```{r gene_table,include = TRUE,eval = TRUE,dependson = "load_data"}
+
+genes %>%
+    select(-contains("transcript")) %>%
+    head() %>%
+    as.data.frame()
+
+```
+
+Where the columns are:
+
+* `gene_id`, `transcript_id` and `transcript_id(s)`, this three
+  columns depend on wheter gene or isoforms where tested, as for the
+  gene case it will contain the gene and the transcript that compose
+  it and for the isoform it will contain the transcript id and the
+  gene to which it belongs.
+
+* `log2FC` (`log2FC_se`) is the log2 fold change (and std. error)
+estimated by `DESeq2`. The fold change is calculated according to `r
+test_name`.
+
+* `stat`, `pvalue` and `padj` are the Wald test stat ( ratio between
+  `log2FC` and `logFC_se` ), the `pvalue` of the `r test_name` and the
+  `padj` is the adjusted pvalue calculated by the BH procedure.
+
+* The `rank_mean_tpm` columns, show a decreasing rank of the average
+  TPM calculated using only the replicates that satisfy each
+  condition. Therefore, low numbers correspond to genes with high TPM
+  for each condition.
+
+## P.value diagnostics
+
+```{r pval_hist,cache = TRUE,include = TRUE,eval = TRUE,dependson = "load_data",fig.width = 7,fig.height=3}
+theme_set(theme_bw())
+pval_histogram(genes,iso)
+
+```
+
+Quick note: The idea of this is to look like a mixture between a
+uniform-like behaviour for all the histogram and a larger spike at
+zero. The height of that spike shows a relationship of how many
+hypothesis genes (or transcripts) will be deemed as differentially
+expressed. However, we need to keep in mind that there we are testing
+many more transcripts than genes.
+
+# Contingency table analysis
+
+In general, we considered that a gene was expressed at the isoform
+level if any of its transcripts is differentially expressed. Then, we
+interrogated how the genes are diff. expressed at each level. We are
+going to consider different adjusted p.value thresholds.
+
+```{r cont_tables,cache = TRUE,include = TRUE,eval = TRUE,dependon = "pval_hist"}
+
+padj_thr %>%
+    map(contingency_table,genes,iso) %>%
+    set_names(padj_thr)
+
+```
+
+## Gene lists
+
+In this section, the genes that are differentially expressed at either
+gene or isoform level will be listed. For each configuration, several
+adjusted p.value thresholds were considered, to avoid unnecesary
+repetitions, only the genes that weren't considered at a lower
+threshold are added.
+
+```{r comparisons,include = FALSE,eval = TRUE,cache = TRUE,dependsOn = "load_data"}
+
+gene_iso_comp <- function(padj_th,res_g,res_i)
+{
+    res_g = res_g %>%
+        mutate(
+            diff = if_else(padj <= padj_th,"yes","no","no"))
+
+    res_i = res_i %>%
+        mutate(
+            diff = if_else(padj <= padj_th,"yes","no","no"))
+
+    res_i %>%
+        group_by(gene_id) %>%
+        summarize(
+            diff = if_else(any(diff == "yes"),"yes","no")
+        ) %>%
+        inner_join(
+            res_g %>%
+            select(gene_id,diff),
+            by = "gene_id",suffix = c(".iso",".gene")) %>%
+        ungroup() 
+           
+}
+
+comparisons = padj_thr %>%
+    map(gene_iso_comp,genes,iso) %>%
+    map(filter,diff.iso != "no" | diff.gene != "no") %>%
+    set_names(padj_thr)
+
+my_set_diff <- function(i, gene_list)
+{
+    if(i == 1){
+        out = gene_list[[i]]
+    }else{
+        out = setdiff(gene_list[[i]],gene_list[[i-1]])
+    }
+
+    out %>%
+        {.$gene_id} %>%
+        strsplit("\\_") %>%
+        map( ~ .[2]) %>%
+        unlist()
+
+
+}    
+
+summarize_set_diff <- function(gene_list)
+{
+    gene_list %>%
+    seq_along() %>%
+    map(my_set_diff,gene_list) %>%
+    set_names(names(gene_list))
+}
+    
+```
+
+### Both differentially expressed at gene and isoform level
+
+```{r both,dependsOn = "comparisons",echo = FALSE,eval = TRUE,include = TRUE,cache = TRUE}
+
+both = comparisons %>%
+    map(filter, diff.iso == "yes" & diff.gene == "yes")
+
+both %>% summarize_set_diff()
+
+```
+
+### Only differentially expressed at gene level
+
+```{r only_gene,dependsOn = "comparisons",echo = FALSE,eval = TRUE,include = TRUE,cache = TRUE}
+
+only_gene = comparisons %>%
+    map(filter,diff.iso == "no" & diff.gene == "yes")
+
+only_gene %>% summarize_set_diff()
+
+```
+
+### Only differentially expressed at isoform level
+
+```{r only_iso,dependsOn = "comparisons",echo = FALSE,eval = TRUE,include = TRUE,cache = TRUE}
+
+only_iso = comparisons %>%
+    map(filter,diff.iso == "yes" & diff.gene == "no")
+
+only_iso %>% summarize_set_diff()
+
+```
