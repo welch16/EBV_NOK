@@ -46,8 +46,12 @@ bwig_tracks:$(DATADR)/BW/hg19/RNAseq-akata-noks-no_treatment-clone1.bw \
             $(DATADR)/BW/hg19/RNAseq-akata-noks-methyl_cell-clone2.bw
 
 # RSEM evaluation
-$(DATADR)/RSEM/hg19/%.genes.results:$(DATADR)/FASTQ/%.fastq
-	$(RSEMDIR)/rsem-calculate-expression -p $(CORES) --estimate-rspd --append-names $^ $(INDEX) $(@D)/$(basename $(basename $(@F)))
+$(DATADR)/RSEM/hg19/Sept17prime/%.genes.results:$(DATADR)/FASTQ/Sept17/%.fastq
+	$(RSEMDIR)/rsem-calculate-expression  \
+		-p $(CORES) \
+		--estimate-rspd \
+		--append-names $^ \
+		$(INDEX) $(@D)/$(basename $(basename $(@F)))
 
 # Sort bam files from transcripts
 $(DATADR)/BAM/hg19/%.genome.bam:$(DATADR)/RSEM/hg19/%.transcript.bam
