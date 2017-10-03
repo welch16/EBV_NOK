@@ -28,6 +28,7 @@ ln -s $indir/MO37_AR005_ACAGTG_L007_R1_001.fastq $outdir/RNAseq-$cell1-$treat1-r
 ln -s $indir/MO38_AR006_GCCAAT_L007_R1_001.fastq $outdir/RNAseq-$cell1-$treat2-rep1.fastq
 ln -s $indir/MO39_AR012_CTTGTA_L007_R1_001.fastq $outdir/RNAseq-$cell1-$treat1-rep2.fastq
 ln -s $indir/MO40_AR019_GTGAAA_L007_R1_001.fastq $outdir/RNAseq-$cell1-$treat2-rep2.fastq
+
 ln -s $indir/MO41_AR002_CGATGT_L007_R1_001.fastq $outdir/RNAseq-$cell2-$treat1-rep1.fastq
 ln -s $indir/MO42_AR004_TGACCA_L007_R1_001.fastq $outdir/RNAseq-$cell2-$treat2-rep1.fastq
 ln -s $indir/MO43_AR007_CAGATC_L007_R1_001.fastq $outdir/RNAseq-$cell2-$treat1-rep2.fastq

@@ -17,7 +17,7 @@ CODEDR=/p/stat/genomics/bin
 
 # Parameters
 
-CORES:=12
+CORES:=16
 IDXSIZES=/p/keles/SOFTWARE/hg19.chrom.sizes
 
 file1=$(DATADR)/RSEM/hg19/RNAseq-akata-noks-no_treatment-clone1.genes.results
@@ -52,6 +52,13 @@ $(DATADR)/RSEM/hg19/Sept17prime/%.genes.results:$(DATADR)/FASTQ/Sept17/%.fastq
 		--estimate-rspd \
 		--append-names $^ \
 		$(INDEX) $(@D)/$(basename $(basename $(@F)))
+
+$(DATADR)/BAM/hg19/bowtie_genome/Sept17/%.sam:$(DATADR)/FASTQ/Sept17/%.fastq
+	/p/stat/genomics/bin/bowtie -q -n 2 \
+		-m 200 -e 99999999 -p $(CORES) --best -S $(INDEX) $^ $@
+
+$(DATADR)/BAM/hg19/bowtie_genome/Sept17/%.bam:$(DATADR)/BAM/hg19/bowtie_genome/Sept17/%.sam
+	samtools view -bS $^ | samtools sort - $(@:.bam=) ; samtools index $@
 
 # Sort bam files from transcripts
 $(DATADR)/BAM/hg19/%.genome.bam:$(DATADR)/RSEM/hg19/%.transcript.bam
