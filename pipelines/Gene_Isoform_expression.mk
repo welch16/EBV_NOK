@@ -13,6 +13,17 @@ data/TPM_matrices/Isoforms_TPM_matrix.tsv:
 		--all_files "data/RSEM/hg19/*isoforms.results" \
 		--out_file $@
 
+data/TPM_matrices/Sept17/Genes_TPM_matrix_newBatch.tsv:
+	Rscript rscripts/generate_TPM_matrices.R \
+		--all_files "data/RSEM/hg19/Sept17prime/*.genes.results" \
+		--out_file $@
+
+data/TPM_matrices/Sept17/Isoforms_TPM_matrix_newBatch.tsv:
+	Rscript rscripts/generate_TPM_matrices.R \
+		--all_files "data/RSEM/hg19/Sept17prime/*.isoforms.results" \
+		--out_file $@
+
+
 Scott_EBV_vs_NOKS_Genes:data/TPM_matrices/Genes_TPM_matrix.tsv
 	Rscript rscripts/differential_analysis_by_cell.R \
 		--A_noTr "data/RSEM/hg19/RNAseq-Noks-mono-rep?.genes.results" \
