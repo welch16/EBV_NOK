@@ -53,11 +53,11 @@ $(DATADR)/RSEM/hg19/Sept17prime/%.genes.results:$(DATADR)/FASTQ/Sept17/%.fastq
 		--append-names $^ \
 		$(INDEX) $(@D)/$(basename $(basename $(@F)))
 
-$(DATADR)/BAM/hg19/bowtie_genome/Sept17/%.sam:$(DATADR)/FASTQ/Sept17/%.fastq
+$(DATADR)/BAM/hg19/bowtie_genome/%.sam:$(DATADR)/FASTQ/%.fastq
 	/p/stat/genomics/bin/bowtie -q -n 2 \
 		-m 200 -e 99999999 -p $(CORES) --best -S $(INDEX) $^ $@
 
-$(DATADR)/BAM/hg19/bowtie_genome/Sept17/%.bam:$(DATADR)/BAM/hg19/bowtie_genome/Sept17/%.sam
+$(DATADR)/BAM/hg19/bowtie_genome/%.bam:$(DATADR)/BAM/hg19/bowtie_genome/%.sam
 	samtools view -bS $^ | samtools sort - $(@:.bam=) ; samtools index $@
 
 # Sort bam files from transcripts
