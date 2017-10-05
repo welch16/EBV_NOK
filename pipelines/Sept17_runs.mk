@@ -6,6 +6,8 @@ RSEMDIR:=/u/w/e/welch/Desktop/Docs/Code/lib/RSEM-1.3.0
 INDEXDIR:=$(BASE)/refs
 
 INDEX:=$(INDEXDIR)/hg19/hg19-rsem
+SIZES:=/p/keles/SOFTWARE/hg19.chrom.sizes
+
 BASE0=$(BASE)/EBV_NOK
 DATADR=$(BASE0)/data
 RDR=$(BASE0)/rscripts
@@ -43,6 +45,12 @@ $(DATADR)/BAM/hg19/Sept17/%.bam:$(DATADR)/RSEM/hg19/Sept17/%.transcript.bam
 
 $(DATADR)/BAM/hg19/Sept17/transcriptome/%.bam:$(DATADR)/BAM/hg19/Sept17/%.bam
 	samtools sort $^ $(@:.bam=) ; samtools index $@
+
+$(DATADR)/WIG/hg19/Sept17/transcriptome/%.wig:$(DATADR)/BAM/hg19/Sept17/%.bam
+	$(RSEMDIR)/rsem-bam2wig $^ $@ $(@F)
+
+$(DATADR)/BW/hg19/Sept17/transcriptome/%.bw:$(DATADR)/WIG/hg19/Sept17/transcriptome/%.wig
+	wigToBigWig $^ $(SIZES) $@
 
 # Marginal differential expression
 
@@ -114,13 +122,6 @@ $(DATADR)/Diff.Genes/hg19/Sept17/NOKS_diff_isoforms.tsv:$(DATADR)/TPM_matrices/S
 # data/BAM/hg19/%.genome.sort.bam:data/BAM/hg19/%.genome.bam
 # 	bamtools sort -in $^ -out $@
 
-# data/WIG/hg19/%.wig:data/BAM/hg19/%.genome.sort.bam
-# 	$(rsemDir)/rsem-bam2wig $^ $@ $(@F)
-
-
-# hg19.sizes=/p/keles/SOFTWARE/hg19.chrom.sizes
-# data/BW/hg19/%.bw:data/WIG/hg19/%.wig
-# 	wigToBigWig $^ $(hg19.sizes) $@
 
 
 
