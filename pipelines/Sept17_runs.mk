@@ -110,6 +110,27 @@ $(DATADR)/Diff.Genes/hg19/Sept17/NOKS_diff_isoforms.tsv:$(DATADR)/TPM_matrices/S
 		--iso "isoform" \
 		--tpm_file $^ --out_file $@
 
+Full_gene_contrast:
+	Rscript rscripts/differential_expression_analysis.R \
+		--sample_dir $(DATADR)/RSEM/hg19/Sept17 \
+		--samples_file $(DATADR)/Diff.Genes/hg19/Sept17/full_model/Sept17_Genes_samples_full.tsv \
+		--contrast_file $(DATADR)/Diff.Genes/hg19/Sept17/full_model/Sept17_contrasts_full.tsv \
+		--tpm_file $(DATADR)/TPM_matrices/Sept17/Genes_TPM_matrix_newBatch.tsv \
+		--iso "gene" \
+		--figs_dir figs/diff_expression/Sept17/full_model \
+		--cores 20 \
+		--out_dir $(DATADR)/Diff.Genes/Sept17/full_model
+
+Full_isoform_contrast:
+	Rscript rscripts/differential_expression_analysis.R \
+		--sample_dir $(DATADR)/RSEM/hg19/Sept17 \
+		--samples_file $(DATADR)/Diff.Genes/hg19/Sept17/full_model/Sept17_Isoforms_samples_full.tsv \
+		--contrast_file $(DATADR)/Diff.Genes/hg19/Sept17/full_model/Sept17_contrasts_full.tsv \
+		--tpm_file $(DATADR)/TPM_matrices/Sept17/Isoforms_TPM_matrix_newBatch.tsv \
+		--iso "isoform" \
+		--figs_dir figs/diff_expression/Sept17/full_model \
+		--cores 20 \
+		--out_dir $(DATADR)/Diff.Genes/hg19/Sept17/full_model
 
 # Alignment to genome
 # $(DATADR)/BAM/hg19/bowtie_genome/Sept17/%.sam:$(DATADR)/FASTQ/Sept17/%.fastq

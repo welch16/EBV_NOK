@@ -1,0 +1,10 @@
+Contrast_name	Fixed_variable	Value	A_samples	B_samples
+Untreated_NOKS_vs_EBV	Treatment	no_treatment	NOKS	EBV
+Untreated_NOKS_vs_DRDZ	Treatment	no_treatment	NOKS	EBV.DRDZ
+Untreated_EBV_vs_DRDZ	Treatment	no_treatment	EBV	EBV.DRDZ
+MethylCell_NOKS_vs_EBV	Treatment	methyl_cell	NOKS	EBV
+MethylCell_NOKS_vs_DRDZ	Treatment	methyl_cell	NOKS	EBV.DRDZ
+MethylCell_EBV_vs_DRDZ	Treatment	methyl_cell	EBV	EBV.DRDZ
+NOKS_Untreated_vs_MethylCell	Cell	NOKS	methyl_cell	no_treatment
+EBV_Untreated_vs_MethylCell	Cell	EBV	methyl_cell	no_treatment
+EBVdRdZ_Untreated_vs_MethylCell	Cell	EBV.DRDZ	methyl_cell	no_treatment
