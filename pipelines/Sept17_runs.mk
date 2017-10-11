@@ -119,7 +119,7 @@ Full_gene_contrast:
 		--iso "gene" \
 		--figs_dir figs/diff_expression/Sept17/full_model \
 		--cores 20 \
-		--out_dir $(DATADR)/Diff.Genes/Sept17/full_model
+		--out_dir $(DATADR)/Diff.Genes/hg19/Sept17/full_model
 
 Full_isoform_contrast:
 	Rscript rscripts/differential_expression_analysis.R \
