@@ -27,7 +27,7 @@ opt = parse_args(OptionParser(option_list = opt_list))
 
 ## opt$sample_dir = "data/RSEM/hg19/Sept17"
 ## opt$samples_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_Genes_samples_full.tsv"
-## opt$contrasts_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_contrasts_full.tsv"
+## opt$contrast_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_contrasts_full.tsv"
 ## opt$tpm_file = "data/TPM_matrices/Sept17/Genes_TPM_matrix_newBatch.tsv"
 
 library(base,quietly = TRUE)
@@ -116,7 +116,7 @@ dev.off()
 
 out_files = file.path(opt$out_dir,
                       paste0(if_else(opt$iso,"Isoforms","Genes"),"_",
-                             contrasts$Contrast_name,".tsv"))
+                             names(results),".tsv"))
 
 message("Saving results...")
 map2(results,
