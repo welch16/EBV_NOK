@@ -5,7 +5,7 @@ library(tidyverse)
 library(ggrepel)
 library(tximport)
 
-indr = "data/RSEM/hg19/Sept17prime"
+indr = "data/RSEM/hg19/Sept17"
 files = indr %>%
     list.files(full.names = TRUE,pattern = "genes.results")
 
@@ -24,7 +24,7 @@ coldata = tibble(files = basename(files)) %>%
         treat = if_else(grepl("methyl",files),"MC","NoTr")) %>%
     as.data.frame() %>%
     mutate(files = NULL)
-        
+
 countmat = round(txdata[["counts"]])
 colnames(countmat) = gsub(".genes.results","",basename(files))
 rownames(coldata) = colnames(countmat)
@@ -55,7 +55,7 @@ PCA_plot <- function(rl,vars = rownames(coldata),ntop = 500,x = 1,y=2)
     select = order(rv, decreasing = TRUE)[seq_len(min(ntop,length(rv)))]
 
     pca = prcomp(t(my_data[select,]))
-    
+
     percentVar = pca$sdev^2/sum(pca$sdev^2)
 
     my_pca = colData(rl)[vars,,drop = FALSE] %>%
@@ -69,14 +69,14 @@ PCA_plot <- function(rl,vars = rownames(coldata),ntop = 500,x = 1,y=2)
             x = pca$x[,x],
             y = pca$x[,y])
 
-    my_pca %>% 
+    my_pca %>%
         ggplot(aes(x,y,colour = interaction(cell,treat)))+
         geom_point(size = 2)+
         theme(legend.position = "top")+
         coord_fixed()+
         xlab(paste0("PC",x,": ",round(percentVar[x] * 100), "% variance"))+
         ylab(paste0("PC",y,": ",round(percentVar[y] * 100), "% variance"))+
-        scale_color_brewer(palette = "Dark2",name = "Cell.Treatment")+        
+        scale_color_brewer(palette = "Dark2",name = "Cell.Treatment")+
         geom_label_repel(aes(x,y,label = rep),size = 3,
                          box.padding = unit(.3,"lines"),
                          point.padding = unit(.7,"lines"),
@@ -126,5 +126,3 @@ plots = list(
     PCA_plot(rl,vars = only_new_clones,ntop = 1e3,x = 2,y= 4))
 u = plots %>% print()
 dev.off()
-
-
