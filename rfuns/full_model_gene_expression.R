@@ -20,63 +20,140 @@ DESEQ2_full_model <- function(txdata,coldata,formula = "~interac")
 
 }
 
-evaluate_contrast <- function(contrast_row,model,tpm_matrix,iso)
+evaluate_contrast <- function(contrast_row,
+                              model_full = NULL,
+                              model_interac = NULL,
+                              tpm_matrix,iso)
 {
+
     which_col = contrast_row$Fixed_variable
     which_val = contrast_row$Value
-    
-    contrasts = colData(model) %>%
-        as.data.frame() %>%
-        as_tibble() %>%
-        mutate(
-            interac = as.character(interac),
-            sizeFactor = NULL) %>% 
-        filter(rlang::UQ(rlang::sym(which_col)) == which_val) %>%
-        unique()
 
-    con_column = contrasts %>%
-        names() %>%
-        {.[ ! . %in% c("interac",which_col)]}
-
-    A_value = contrasts %>%
-        filter(rlang::UQ(rlang::sym(con_column)) == contrast_row$A_samples) %>%
-        {.$interac}
-    
-    B_value = contrasts %>%
-        filter(rlang::UQ(rlang::sym(con_column)) == contrast_row$B_samples) %>%
-        {.$interac}
-
-    samples = colData(model) %>%
-        rownames()
-
-    A_samples = colData(model) %>%
-        as.data.frame() %>%
-        mutate(samples) %>% 
-        filter( interac == A_value) %>%
-        select(samples) %>% .[[1]]
-
-    B_samples = colData(model) %>%
-        as.data.frame() %>%
-        mutate(samples) %>%
-        filter(interac == B_value) %>%
-        select(samples) %>% .[[1]]
-
-    mean_tpm_mat = tpm_mat[,1:2] %>%
-        mutate(
-            mean_A = rowMeans(tpm_mat[,A_samples]),
-            mean_B = rowMeans(tpm_mat[,B_samples])) %>%
-        mutate_at(
-            .vars = vars(contains("mean_")),
-            .funs = funs(dense_rank(desc(.)))) %>%
-        set_names(c(names(.)[1:2],paste0("rank:",c(A_value,B_value))))
+    if(!is.na(which_col)){
        
-    ## the treatment is A_value vs B_value
-    out = results(model,
-            contrast = c("interac",A_value,B_value),
-            cooksCutoff =FALSE ,
-            tidy = TRUE) %>%
-        as_tibble()
+        model = model_interac
+        
+        contrasts = colData(model) %>%
+            as.data.frame() %>%
+            as_tibble() %>%
+            mutate(
+                interac = as.character(interac),
+                sizeFactor = NULL) %>% 
+            filter(rlang::UQ(rlang::sym(which_col)) == which_val) %>%
+            unique() %>%
+            mutate_all(funs(as.character))
 
+        test_column = contrasts %>%
+            names() %>%
+            {.[ ! . %in% c("interac",which_col)]}
+        
+        A_value = contrasts %>%
+            filter(rlang::UQ(rlang::sym(test_column)) == contrast_row$A_samples) %>%
+            {.$interac}
+        
+        B_value = contrasts %>%
+            filter(rlang::UQ(rlang::sym(test_column)) == contrast_row$B_samples) %>%
+            {.$interac}
+        
+        samples = colData(model) %>%
+            rownames()
+        
+        A_samples = colData(model) %>%
+            as.data.frame() %>%
+            mutate(samples) %>% 
+            filter( interac == A_value) %>%
+            select(samples) %>% .[[1]]
+        
+        B_samples = colData(model) %>%
+            as.data.frame() %>%
+            mutate(samples) %>%
+            filter(interac == B_value) %>%
+            select(samples) %>% .[[1]]
+        
+        mean_tpm_mat = tpm_mat[,1:2] %>%
+            mutate(
+                mean_A = rowMeans(tpm_mat[,A_samples]),
+                mean_B = rowMeans(tpm_mat[,B_samples])) %>%
+            mutate_at(
+                .vars = vars(contains("mean_")),
+                .funs = funs(dense_rank(desc(.)))) %>% ## highest expressed genes, low rank
+            set_names(c(names(.)[1:2],paste0("rank:",c(A_value,B_value))))
+
+        out = results(model,
+                      contrast = c("interac",A_value,B_value),
+                      cooksCutoff =FALSE ,
+                      tidy = TRUE) %>%
+            as_tibble()
+        
+    }else{
+        model = model_full
+        
+        contrasts = colData(model) %>%
+            as.data.frame() %>%
+            as_tibble() %>%
+            mutate(
+                interac = as.character(interac),
+                sizeFactor = NULL) %>%
+            unique() %>%
+            mutate_all(funs(as.character))
+
+        to_test = contrast_row %>%
+            select(contains("samples")) %>%
+            t() %>% as.vector()
+
+        which_col = contrasts %>%
+            as.list() %>%
+            map_lgl( ~ all( to_test %in% .)) %>%
+            {names(contrasts)[.]}
+    
+        test_column = contrasts %>%
+            names() %>%
+            {.[ ! . %in% c("interac",which_col)]}
+        
+        A_value = contrasts %>%
+            filter(rlang::UQ(rlang::sym(which_col)) == contrast_row$A_samples) %>%
+            {.[[which_col]]} %>% unique()
+            
+        
+        B_value = contrasts %>%
+            filter(rlang::UQ(rlang::sym(which_col)) == contrast_row$B_samples) %>%
+            {.[[which_col]]} %>% unique()
+        
+        samples = colData(model) %>%
+            rownames()
+        
+        A_samples = colData(model) %>%
+            as.data.frame() %>%
+            mutate(samples) %>% 
+            filter( rlang::UQ(rlang::sym(which_col)) == A_value) %>%
+            select(samples) %>% .[[1]]
+        
+        B_samples = colData(model) %>%
+            as.data.frame() %>%
+            mutate(samples) %>%
+            filter( rlang::UQ(rlang::sym(which_col)) == B_value) %>%
+            select(samples) %>% .[[1]]
+        
+        mean_tpm_mat = tpm_mat[,1:2] %>%
+            mutate(
+                mean_A = rowMeans(tpm_mat[,A_samples]),
+                mean_B = rowMeans(tpm_mat[,B_samples])) %>%
+            mutate_at(
+                .vars = vars(contains("mean_")),
+                .funs = funs(dense_rank(desc(.)))) %>% ## highest expressed genes, low rank
+            set_names(c(names(.)[1:2],paste0("rank:",c(A_value,B_value))))
+
+        out = results(model,
+                      contrast = c(which_col, A_value,B_value),
+                      cooksCutoff =FALSE ,
+                      tidy = TRUE) %>%
+            as_tibble()
+
+    }
+        
+    ## the treatment is A_value vs B_value
+
+        
     if(opt$iso){
         out %>%
             dplyr::rename(
@@ -84,11 +161,11 @@ evaluate_contrast <- function(contrast_row,model,tpm_matrix,iso)
             inner_join(mean_tpm_mat, by = "transcript_id") %>%
             select(contains("id"),everything())
     }else{
-        out %>%
-            dplyr::rename(
-                       gene_id = row) %>%
-            inner_join(mean_tpm_mat,by = "gene_id") %>%
-            select(contains("id"),everything())
+            out %>%
+                dplyr::rename(
+                           gene_id = row) %>%
+                inner_join(mean_tpm_mat,by = "gene_id") %>%
+                select(contains("id"),everything())
     }
 
     

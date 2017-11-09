@@ -25,10 +25,10 @@ opt_list = list(
 
 opt = parse_args(OptionParser(option_list = opt_list))
 
-## opt$sample_dir = "data/RSEM/hg19/Sept17"
-## opt$samples_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_Genes_samples_full.tsv"
-## opt$contrast_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_contrasts_full.tsv"
-## opt$tpm_file = "data/TPM_matrices/Sept17/Genes_TPM_matrix_newBatch.tsv"
+opt$sample_dir = "data/RSEM/hg19/Sept17"
+opt$samples_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_Genes_samples_full.tsv"
+opt$contrast_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_contrasts_full.tsv"
+opt$tpm_file = "data/TPM_matrices/Sept17/Genes_TPM_matrix_newBatch.tsv"
 
 library(base,quietly = TRUE)
 library(tidyverse,quietly = TRUE)
@@ -83,15 +83,40 @@ rownames(coldata) = names(sample_files)
 library(DESeq2,quietly = TRUE)
 library(BiocParallel,quietly = TRUE)
 
-deseq = DESEQ2_full_model(txdata,coldata,"~interac")
+factors = samples %>%
+    select( -c(1,ncol(samples))) %>%
+    names()
+
+if(length(factors) == 2){
+    full_formula = paste0("~",
+                          paste(c(factors,
+                                  paste(factors,collapse = ":")),
+                                collapse= "+"))
+}else{
+    stop("need to figure out this ammount of factors")
+}
+
+
+deseq_full = DESEQ2_full_model(txdata,coldata,full_formula )
+deseq_interac = DESEQ2_full_model(txdata,coldata,"~interac")
 
 message("Fitting main model...")
-model = DESeq(deseq,minReplicatesForReplace = Inf,parallel = TRUE)
+model_full = DESeq(deseq_full,minReplicatesForReplace = Inf,parallel = TRUE)
+model_interac = DESeq(deseq_interac,minReplicatesForReplace = Inf , parallel = TRUE)
+
+stopifnot(
+    identical(
+        colData(model_full)$sizeFactor,
+        colData(model_interac)$sizeFactor))
 
 message("Performing contrasts...")
+ ## Note: The ranking is decreasing, hence highest expressed genes
+ ## will have low ranked values
 results = contrasts %>%
     split(.$Contrast_name) %>%
-    map(evaluate_contrast,model,tpm_mat,opt$iso)
+    map(evaluate_contrast,
+        model_full,
+        model_interac,tpm_mat,opt$iso)
 
 theme_set(theme_bw())
 
