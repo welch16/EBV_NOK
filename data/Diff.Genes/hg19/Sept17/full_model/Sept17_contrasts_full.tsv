@@ -8,3 +8,7 @@ MethylCell_EBV_vs_DRDZ	Treatment	methyl_cell	EBV	EBV.DRDZ
 NOKS_Untreated_vs_MethylCell	Cell	NOKS	methyl_cell	no_treatment
 EBV_Untreated_vs_MethylCell	Cell	EBV	methyl_cell	no_treatment
 EBVdRdZ_Untreated_vs_MethylCell	Cell	EBV.DRDZ	methyl_cell	no_treatment
+NOKS_vs_EBV	NA	NA	NOKS	EBV
+NOKS_vs_DRDZ	NA	NA	NOKS	EBV.DRDZ
+EBV_vs_DRDZ	NA	NA	EBV	EBV.DRDZ
+Untreated_vs_MethylCell	NA	NA	no_treatment	methyl_cell
