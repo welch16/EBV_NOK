@@ -13,6 +13,8 @@ opt_list = list(
                 help = "File with the contrasts to be calculated after the models is fitted"),
     make_option("--tpm_file",action = "store_true",type = "character",
                 help = "File with the TPM matrix of all samples"),
+    make_option("--RUVr",action = "store_true",type = "logical",default = FALSE,
+                help = "Logical flag indicating use of the RUVr correction"),
     make_option(c("-i","--iso"),action = "store_true",type = "character",default = "gene",
                 help = "Flag indicating if is genes or isoform"),
     make_option("--figs_dir",action = "store_true",type = "character",default = tempdir(),
@@ -29,6 +31,7 @@ opt$sample_dir = "data/RSEM/hg19/Sept17"
 opt$samples_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_Genes_samples_full.tsv"
 opt$contrast_file = "data/Diff.Genes/hg19/Sept17/full_model/Sept17_contrasts_full.tsv"
 opt$tpm_file = "data/TPM_matrices/Sept17/Genes_TPM_matrix_newBatch.tsv"
+opt$RUVr = TRUE
 
 library(base,quietly = TRUE)
 library(tidyverse,quietly = TRUE)
@@ -108,6 +111,27 @@ stopifnot(
     identical(
         colData(model_full)$sizeFactor,
         colData(model_interac)$sizeFactor))
+
+if(opt$RUVr){
+    library(RUVSeq,quietly = TRUE)
+    residuals_full = residuals_DESeq2(model_full)
+    residuals_interac = residuals_DESeq2(model_interac)
+
+    deseq_full_corr = DESEQ2_full_model_corr(model_full,
+                                             residuals_full,
+                                             paste0(full_formula , "+W_1"))
+    deseq_inter_corr = DESEQ2_full_model_corr(model_interac,
+                                              residuals_interac,
+                                              "~interac+W_1")
+
+    message("Fitting corrected model...")
+    model_full = DESeq(deseq_full_corr,
+                       minReplicatesForReplace = Inf,parallel = TRUE)
+    model_interac = DESeq(deseq_inter_corr,
+                          minReplicatesForReplace = Inf , parallel = TRUE)
+
+    
+}
 
 message("Performing contrasts...")
  ## Note: The ranking is decreasing, hence highest expressed genes
