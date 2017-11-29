@@ -25,7 +25,25 @@ DESEQ2_full_model <- function(txdata,coldata,formula = "~interac")
 
 }
 
+DESEQ2_full_model_corr <- function(model,residuals,formula)
+{
 
+    RUVset = newSeqExpressionSet(
+        as.matrix(counts(model)),
+        phenoData = colData(model) %>%
+            as.data.frame())
+
+    genes = rownames(counts(model))
+    RUVset = RUVr(RUVset,genes, k = 1,residuals)
+
+    deseq = DESeqDataSetFromMatrix(
+        counts(RUVset),
+        colData = DataFrame(pData(RUVset)),
+        design = as.formula(formula))
+    
+    deseq[ rowSums(counts(deseq)) > 1,]
+    
+}
 
 evaluate_contrast <- function(contrast_row,
                               model_full = NULL,
