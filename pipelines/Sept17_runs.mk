@@ -28,6 +28,14 @@ $(DATADR)/RSEM/hg19/Sept17/%.genes.results:$(DATADR)/FASTQ/Sept17/%.fastq
 		--append-names $^ \
 		$(INDEX) $(@D)/$(basename $(basename $(@F)))
 
+$(DATADR)/RSEM/AKATA-GFP/Sept17/%.genes.results:$(DATADR)/FASTQ/Sept17/%.fastq
+	$(RSEMDIR)/rsem-calculate-expression \
+		-p $(CORES) \
+		--estimate-rspd \
+		--append-names $^ \
+		$(INDEXDIR)/AKATA-GFP/AKATA_GFP_RSEM \
+		$(@D)/$(basename $(basename $(@F)))
+
 # Build TPM
 $(DATADR)/TPM_matrices/Sept17/Genes_TPM_matrix_newBatch.tsv:$(DATADR)/RSEM/hg19/Sept17/*.genes.results
 	Rscript rscripts/generate_TPM_matrices.R \

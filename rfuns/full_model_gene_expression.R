@@ -1,4 +1,9 @@
-
+residuals_DESeq2 <- function(model)
+{
+    fitted.common.scale = t(t(assays(model)[["mu"]])/sizeFactors(model))   
+    residuals = counts(model, normalized=TRUE) - fitted.common.scale 
+    residuals
+}
 
 get_reps <- function(x)
 {
@@ -20,17 +25,36 @@ DESEQ2_full_model <- function(txdata,coldata,formula = "~interac")
 
 }
 
+DESEQ2_full_model_corr <- function(model,residuals,formula)
+{
+
+    RUVset = newSeqExpressionSet(
+        as.matrix(counts(model)),
+        phenoData = colData(model) %>%
+            as.data.frame())
+
+    genes = rownames(counts(model))
+    RUVset = RUVr(RUVset,genes, k = 1,residuals)
+
+    deseq = DESeqDataSetFromMatrix(
+        counts(RUVset),
+        colData = DataFrame(pData(RUVset)),
+        design = as.formula(formula))
+    
+    deseq[ rowSums(counts(deseq)) > 1,]
+    
+}
+
 evaluate_contrast <- function(contrast_row,
                               model_full = NULL,
                               model_interac = NULL,
                               tpm_matrix,iso)
 {
-
     which_col = contrast_row$Fixed_variable
     which_val = contrast_row$Value
 
     if(!is.na(which_col)){
-       
+
         model = model_interac
         
         contrasts = colData(model) %>%
@@ -45,15 +69,17 @@ evaluate_contrast <- function(contrast_row,
 
         test_column = contrasts %>%
             names() %>%
-            {.[ ! . %in% c("interac",which_col)]}
+            {.[ ! . %in% c("interac",which_col)]} %>%
+            {.[1]}
+                
         
         A_value = contrasts %>%
             filter(rlang::UQ(rlang::sym(test_column)) == contrast_row$A_samples) %>%
-            {.$interac}
+            {.$interac} %>% unique()
         
         B_value = contrasts %>%
             filter(rlang::UQ(rlang::sym(test_column)) == contrast_row$B_samples) %>%
-            {.$interac}
+            {.$interac} %>% unique()
         
         samples = colData(model) %>%
             rownames()
@@ -69,7 +95,7 @@ evaluate_contrast <- function(contrast_row,
             mutate(samples) %>%
             filter(interac == B_value) %>%
             select(samples) %>% .[[1]]
-        
+
         mean_tpm_mat = tpm_mat[,1:2] %>%
             mutate(
                 mean_A = rowMeans(tpm_mat[,A_samples]),
@@ -79,6 +105,7 @@ evaluate_contrast <- function(contrast_row,
                 .funs = funs(dense_rank(desc(.)))) %>% ## highest expressed genes, low rank
             set_names(c(names(.)[1:2],paste0("rank:",c(A_value,B_value))))
 
+        
         out = results(model,
                       contrast = c("interac",A_value,B_value),
                       cooksCutoff =FALSE ,
@@ -86,6 +113,7 @@ evaluate_contrast <- function(contrast_row,
             as_tibble()
         
     }else{
+        
         model = model_full
         
         contrasts = colData(model) %>%
@@ -108,7 +136,8 @@ evaluate_contrast <- function(contrast_row,
     
         test_column = contrasts %>%
             names() %>%
-            {.[ ! . %in% c("interac",which_col)]}
+            {.[ ! . %in% c("interac",which_col)]} %>%
+            {.[1]}
         
         A_value = contrasts %>%
             filter(rlang::UQ(rlang::sym(which_col)) == contrast_row$A_samples) %>%
@@ -153,7 +182,7 @@ evaluate_contrast <- function(contrast_row,
         
     ## the treatment is A_value vs B_value
 
-        
+    
     if(opt$iso){
         out %>%
             dplyr::rename(
