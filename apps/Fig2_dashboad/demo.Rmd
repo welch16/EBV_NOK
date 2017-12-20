@@ -3,7 +3,7 @@ title: "Untreated samples: NOKS+EBV vs NOKS"
 output: 
   flexdashboard::flex_dashboard:
     mathjax: local
-    theme: flatly
+    theme: spacelab
     storyboard: true
 runtime: shiny
 ---
@@ -14,8 +14,14 @@ library(tidyverse)
 library(d3heatmap)
 library(viridis)
 library(scales)
+library(ggrepel)
 
-load("fig2data.RData")
+theme_set(
+  theme_bw()+
+    theme(legend.position = "top"))
+
+load("fig2data.RData") 
+## alignment, rsem_data,diff_genes
 
 # 
 #   require(viridis)
@@ -37,44 +43,98 @@ load("fig2data.RData")
 Inputs {.sidebar}
 -------------------------------------
 
-This is a dashboard. The idea is to list all the plots that we spoke about in an interactive fashion. 
+This is a dashboard. Since the main difference between the plots is the data used and the hypothesis tests, then this will show the typical plots for an untreated contrast. The only difference between this and previous analysis is that I filtered out with less than 20 reads.
 
 ```{r}
 # shiny inputs defined here
 
- numericInput('heattop', 'Heatmap top DE genes', 10,
+  numericInput('heattop', 'Heatmap top DE genes', 10,
                  min = 10, max = 50,step =5 )
+  numericInput("fdr","False Discovery Rate",0.05,
+               min = 1e-4,max = .1,step = .01)
+  numericInput("fc","Abs logFC limit",5,
+               min = 1,max = 15,step = .5)
+  numericInput("lpval","-log(p.value) limit",5,
+               min = 1,max = 20)  
+  numericInput("bm","Max base mean",50,
+               min = 25,step = 100)
 
 ```
 
-
- 
-
-### DT demo. Just a block adding the genes that are going to be in the heatmap
+### Alignment plot, I showed this plot like a year ago to show the quality of the data. 
 
 ```{r}
 
-heat_tpm <- reactive({
-  genes = diff_genes %>% 
-    arrange(padj) %>% 
-    head(input$heattop) %>% 
-    pluck("ensembl_id")
-  
-  tpm_mat %>% 
-    filter(ensembl_id %in% genes) %>% 
-    select(gene_id,contains("mono"))
+alignment %>% 
+    ggplot(
+        aes(aligned,aligned_percent))+
+    geom_point()+
+    geom_text_repel(aes(label = replicate))+
+    facet_grid(treat ~ cell)+
+    theme(axis.text.x = element_text(angle = 25,
+                                     hjust = 1))+
+    scale_x_continuous(
+        labels = comma)+
+    scale_y_continuous(
+        labels = percent)+
+    xlab("Number of aligned reads")+
+    ylab("Percentage of aligned reads")
+
+
+# heat_tpm <- reactive({
+#   genes = diff_genes %>% 
+#     arrange(padj) %>% 
+#     head(input$heattop) %>% 
+#     pluck("ensembl_id")
+#   
+#   tpm_mat %>% 
+#     filter(ensembl_id %in% genes) %>% 
+#     select(gene_id,contains("mono"))
+# })
+# 
+# div(
+#   DT::renderDataTable({
+#     DT::datatable(heat_tpm())
+#   }),style = "font-size:80%")
+```
+
+***
+This shows why we removed rep1 from EBV cell w.o. treatment. I am not sure if we should remove rep3 from NOKS - MC. It is hard to tell from the plot, it has roughly 3 times the amount of reads aligned but the percentage of aligned reads is also low (approx. 28%)
+
+
+### p.value histogram. 
+
+
+```{r}
+
+diff_genes %>% 
+    ggplot(aes(pvalue))+
+    geom_histogram(aes(y = ..count../sum(..count..) ),
+                   boundary = 0 , 
+                   fill = "white",
+                   color = "black",
+                 bins = 51)+
+  geom_hline(yintercept = 0.015,linetype = 2,colour = "red")
+
+```    
+
+***
+This plot is the main reason why I decided to filter genes with less than 20 reads. Previously, I was filtering genes without reads aligned to, but that was causing a spike in the p.values histograms around 1. Unfortunately, the increasing trend in the histogram can't be helped. 
+
+
+### Volcano plot, ideally we care about the genes that have a low p.value and the log2FoldChange is not extreme
+
+```{r}
+
+renderPlot({
+  diff_genes %>% 
+    ggplot(aes(log2FoldChange,-log10(pvalue),colour = padj <= input$fdr))+
+    geom_point()+
+    scale_color_brewer(palette = "Set1")+
+    scale_y_continuous(limits = c(0,input$lpval))+
+    scale_x_continuous(limits = c(-input$fc,input$fc))
 })
 
-div(
-  DT::renderDataTable({
-    DT::datatable(heat_tpm())
-  }),style = "font-size:80%")
-```
-    
-
-### Volcano plot
-
-```{r}
 ```
 
 
@@ -82,14 +142,19 @@ div(
 
 ```{r}
 
+renderPlot({
+  diff_genes %>% 
+    ggplot(aes(baseMean,log2FoldChange))+
+    scale_color_brewer(palette = "Set1")+
+    geom_point(aes(colour = padj <= input$fdr),alpha = .75)+
+    scale_y_continuous(limits = c(-input$fc,input$fc))+
+    scale_x_continuous(limits = c(0,input$bm))
+})
+
 ```
 
 
-### TPM histogram?
 
-
-```{r}
-```
 
 
 

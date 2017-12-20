@@ -1,5 +1,4 @@
 
-rm(list = ls())
 
 library(patchwork)
 library(scales)
@@ -91,8 +90,7 @@ rle_plot <- function(rsem)
             strip.text.y = element_text(angle = 0))+
         geom_vline(xintercept = 0,colour = "red",
                    linetype = 2)+
-    scale_x_continuous(limits = c(-5,5),)
-
+    scale_x_continuous(limits = c(-5,5))
 }
 
 rle_histogram = rle_plot(rsem)
@@ -102,57 +100,9 @@ ggsave(file = file.path(figsdr,"Histogram_RLE_scott.pdf"),
        height = unit(8,"in"),
        width = unit(6,"in"))
 
-stri_subset <- function(string,pattern)
-{
-    string[!str_detect(string,pattern)]
-}
+logs = read_tsv(file.path(figsdr,"Scott_aligned_reads_table.tsv"))
 
-log_files = "manuscript/logs" %>%
-    list.files(full.names = TRUE,
-               recursive = TRUE) %>%
-    str_subset("RSEM") %>%
-    str_subset("Noks") %>%
-    stri_subset("RNAseq_bowtie")
-
-parse_RSEM_bowtie_log <- function(file)
-{
-
-  logs = read_file(file)
-  logs = strsplit(logs,"\n")
-  logs = logs[[1]]
-  reads = logs[grep('#',logs)]
-  reads = strsplit(reads,":",fixed = TRUE)
-
-  reads = lapply(reads,strsplit," ")
-
-  dt = data.frame(t( as.numeric(sapply(reads,function(x)x[[2]][2]))))
-  colnames(dt) = c("processed","aligned","failed","supressed")
-  
-  dt %>% as.tbl
-}
-
-logs = log_files %>%
-    set_names(
-        basename(.) %>%
-        str_replace(".logs","")) %>% 
-    map(parse_RSEM_bowtie_log) %>%
-    tibble(
-        file = names(.),
-        data = .) %>%
-    unnest() %>%
-    inner_join(
-        rsem %>%
-        select(file,cell,treat) %>%
-        unique(),by = "file") %>%
-    mutate(
-        aligned_percent = aligned / processed,
-        replicate = file %>%
-            str_split("-") %>%
-            map_chr( ~ .[length(.)])) %>%
-    select(file,cell,treat,replicate,everything()) 
-
-write_tsv(logs,path = file.path(figsdr,"Scott_aligned_reads_table.tsv"))
-
+library(ggrepel)
 
 summary_plot =
     logs %>%
