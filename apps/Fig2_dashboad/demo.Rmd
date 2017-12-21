@@ -44,7 +44,7 @@ Inputs {.sidebar}
 
 This is a dashboard. Since the main difference between the plots is the data used and the hypothesis tests, then this will show the typical plots for an untreated contrast. The only difference between this and previous analysis is that I filtered out with less than 20 reads.
 
-```{r}
+```{r sidebar}
 # shiny inputs defined here
 
   numericInput('heattop', 'Heatmap top DE genes', 10,
@@ -62,7 +62,7 @@ This is a dashboard. Since the main difference between the plots is the data use
 
 ### Alignment plot, I showed this plot like a year ago to show the quality of the data. 
 
-```{r}
+```{r alignment}
 
 alignment %>% 
     ggplot(
