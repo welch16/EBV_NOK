@@ -89,8 +89,16 @@ rsem_data = rsem_data %>%
   mutate(
     rsem = map(rsem , ~ filter(., gene_id %in% pluck(diff_genes,"gene_id")) )
   )
-  
+
+message("generating rlog object")
+rlog = rlog(deseq)  
+rlogmat = rlog %>% 
+  assay() %>% 
+  as.matrix()
+
 message("saving...")
 save(alignment,
      rsem_data,
-     diff_genes,file = "./apps/Fig2_dashboad/fig2data.RData")
+     diff_genes,
+     rlogmat,
+     file = "./apps/Fig2_dashboad/fig2data.RData")
