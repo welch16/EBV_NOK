@@ -1,5 +1,5 @@
 ---
-title: "Tabset Column"
+title: "Untreated samples: NOKS+EBV vs NOKS"
 output:
   flexdashboard::flex_dashboard:
     theme: cerulean
@@ -8,62 +8,250 @@ runtime: shiny
 
 ```{r global,include=TRUE,echo = FALSE,eval = TRUE}
 
-library(tidyverse)
+load("fig2data.RData")
 
-df = tibble(x = rnorm(100),
-            y = rnorm(100))
+## block to check if the packages are installed
+list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
+                      "rmarkdown","flexdashboard")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+library(tidyverse)
+library(ggrepel)
+library(viridis)
+library(scales)
+library(shiny)
 
 theme_set(
   theme_bw()+
     theme(legend.position = "top")
 )
 
-```
-    
+MA_tpm = rsem_data %>% 
+  filter(treatment == "none") %>% 
+  select(file,cell,rsem) %>% 
+  unnest() %>% 
+  group_by(cell,gene_id) %>% 
+  summarize(
+    tpm = mean(TPM)
+  ) %>% 
+  ungroup() %>% 
+  spread(cell,tpm) %>% 
+  mutate_if(
+    is.numeric,
+    funs(log2(1 + .))
+  ) %>% 
+  mutate(
+    A = 0.5 * (EBV + NOKS),
+    M = EBV - NOKS
+  ) %>% 
+  inner_join(
+    diff_genes %>% 
+      select(gene_id,padj),by = "gene_id"
+  )
 
-```{r global}  
-  
 ```
     
 Inputs {.sidebar}
 -------------------------------------
 
-```{r}
+```{r sidebar}
 # shiny inputs defined here
 
-  numericInput('heattop', 'Heatmap top DE genes', 10,
-                 min = 10, max = 50,step =5 )
   numericInput("fdr","False Discovery Rate",0.05,
-               min = 1e-4,max = .1,step = .01)
-  numericInput("fc","Abs logFC limit",5,
-               min = 1,max = 15,step = .5)
-  numericInput("lpval","-log(p.value) limit",5,
-               min = 1,max = 20)  
-  numericInput("bm","Max base mean",50,
-               min = 25,step = 100)
+               min = 1e-6,max = 1,step = .01)
+  numericInput("ps","Point size",1,
+               min = .1,max = 20)
 ```
 
    
 Column {.tabset}
 -------------------------------------
    
-### Chart 2
+### Alignment
 
-```{r}
+```{r alignment}
 
-df %>% 
-  ggplot(aes(x,y))+
-  geom_point()
-
-
-
-
+alignment %>% 
+    ggplot(
+        aes(aligned,aligned_percent))+
+    geom_point()+
+    geom_text_repel(aes(label = replicate))+
+    facet_grid(treat ~ cell)+
+    theme(axis.text.x = element_text(angle = 25,
+                                     hjust = 1))+
+    scale_x_continuous(
+        labels = comma)+
+    scale_y_continuous(
+        labels = percent)+
+    xlab("Number of aligned reads")+
+    ylab("Percentage of aligned reads")
 ```   
 
-*** 
-test test
- 
-### Chart 3
-    
-```{r}
+### p.value
+
+```{r pval_histogram}
+
+diff_genes %>% 
+    ggplot(aes(pvalue))+
+    geom_histogram(aes(y = ..count../sum(..count..) ),
+                   boundary = 0 , 
+                   fill = "white",
+                   color = "black",
+                 bins = 51)+
+  geom_hline(yintercept = 0.015,linetype = 2,colour = "red")
+
 ```
+
+### Volcano
+    
+```{r volcano}
+
+volcano_ranges <- reactiveValues(x = NULL, y = NULL)
+
+observeEvent(input$volcano_dblclick, {
+  brush <- input$volcano_brush
+  if (!is.null(brush)) {
+    volcano_ranges$x <- c(brush$xmin, brush$xmax)
+    volcano_ranges$y <- c(brush$ymin, brush$ymax)
+    volcno_ranges$y[1] <- max(volcano_ranges$y[1],0)
+  } else {
+    volcano_ranges$x <- NULL
+    volcano_ranges$y <- NULL
+  }
+})
+
+output$volcano = renderPlot({
+  
+  diff_genes %>%
+    ggplot(aes(log2FoldChange,-log10(pvalue),colour = padj <= input$fdr))+
+    geom_point(size = input$ps,alpha = .75)+
+    scale_color_brewer(palette = "Set1")+
+    coord_cartesian(
+      xlim = volcano_ranges$x ,
+      ylim = volcano_ranges$y
+    )
+})
+
+plotOutput("volcano",
+           click = "volcano_click",
+           dblclick = "volcano_dblclick",
+           brush = brushOpts(
+             id = "volcano_brush",
+             resetOnNew = TRUE
+           ))
+```
+
+### MA - DESeq
+
+```{r ma_deseq}
+
+MA1_ranges <- reactiveValues(x = NULL, y = NULL)
+
+observeEvent(input$MA1_dblclick, {
+  brush <- input$MA1_brush
+  if (!is.null(brush)) {
+    MA1_ranges$x <- c(brush$xmin, brush$xmax)
+    MA1_ranges$x[1] <- max(0 , MA1_ranges$x[1])
+    MA1_ranges$y <- c(brush$ymin, brush$ymax)
+  } else {
+    MA1_ranges$x <- NULL
+    MA1_ranges$y <- NULL
+  }
+})
+
+
+output$MA1 = renderPlot({
+  diff_genes %>% 
+    ggplot(aes(baseMean,log2FoldChange))+
+    scale_color_brewer(palette = "Set1")+
+    geom_point(aes(colour = padj <= input$fdr),alpha = .75,size = input$ps)+
+    coord_cartesian(
+      xlim = MA1_ranges$x,
+      ylim = MA1_ranges$y
+    )
+})
+
+plotOutput("MA1",
+           click = "MA1_click",
+           dblclick = "MA1_dblclick",
+           brush = brushOpts(
+             id = "MA1_brush",
+             resetOnNew = TRUE
+           ))
+
+```
+
+### MA - data
+
+```{r}
+
+MA2_ranges <- reactiveValues(x = NULL, y = NULL)
+
+observeEvent(input$MA2_dblclick, {
+  brush <- input$MA2_brush
+  if (!is.null(brush)) {
+    MA2_ranges$x <- c(brush$xmin, brush$xmax)
+    MA2_ranges$x[1] <- max(0 , MA1_ranges$x[1])
+    MA2_ranges$y <- c(brush$ymin, brush$ymax)
+  } else {
+    MA2_ranges$x <- NULL
+    MA2_ranges$y <- NULL
+  }
+})
+
+output$MA2 = renderPlot({
+  MA_tpm %>% 
+    ggplot(aes(A,M))+
+    scale_color_brewer(palette = "Set1")+
+    geom_point(aes(colour = padj <= input$fdr),alpha = .75,size = input$ps)+
+    coord_cartesian(
+      xlim = MA2_ranges$x,
+      ylim = MA2_ranges$y
+    )
+})
+
+plotOutput("MA2",
+           click = "MA2_click",
+           dblclick = "MA2_dblclick",
+           brush = brushOpts(
+             id = "MA2_brush",
+             resetOnNew = TRUE
+           ))
+
+
+```
+
+
+
+### Heatmap - DESeq
+
+### Heatmap - data
+
+
+
+
+### Genes tables
+
+```{r}  
+actionLink("generate","Generate gene list!")
+```
+
+### Instructions
+
+**Alignment** - This plot is fixed, I think for the supplement
+
+**p.value** - Also fixed, there is a deviation of the multiple testing assumptions
+
+**volcano** and **MA plots** - In these three, can click the point and build a table of DE genes
+
+
+```{r}
+renderText({
+  "File saved in ..."
+})
+
+```
+
+
+
