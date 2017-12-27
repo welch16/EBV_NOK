@@ -23,6 +23,8 @@ library(scales)
 library(shiny)
 library(d3heatmap)
 
+my_alpha = .5
+
 theme_set(
   theme_bw()+
     theme(legend.position = "top",
@@ -99,6 +101,21 @@ Inputs {.sidebar}
   
   numericInput("heatmap_most","Most DE genes",10,
                min = 5,max = 100,step = 1)
+  
+  hr()
+  
+  actionButton("save","Save genes")
+  textInput("file",label = "Genes file", value = "fig2_genes.tsv")
+  
+  observeEvent(input$save,{
+    if(!is.null(my_genes$ensembl)){
+      to_save = diff_genes %>% 
+        filter(ensembl %in% my_genes$ensembl)
+      
+      write_tsv(to_save,input$file)
+      
+    }
+  })
   
   ## action button events  
   #  ntext <- eventReactive(input$goButton, {
@@ -195,7 +212,8 @@ output$volcano = renderPlot({
       xlim = volcano_ranges$x ,
       ylim = volcano_ranges$y
     )+
-    ylab("-log10(pvalue)")
+    ylab("-log10(pvalue)")+
+    geom_vline(xintercept = 0,colour = "black",linetype = 2)
 })
 
 fillCol(flex = c(1,NA),
@@ -249,7 +267,8 @@ output$MA1 = renderPlot({
     coord_cartesian(
       xlim = MA1_ranges$x,
       ylim = MA1_ranges$y
-    )
+    )+
+    geom_hline(yintercept = 0,colour = "black",linetype = 2)
 })
 
 fillCol(flex = c(1,NA),
@@ -302,7 +321,8 @@ output$MA2 = renderPlot({
     coord_cartesian(
       xlim = MA2_ranges$x,
       ylim = MA2_ranges$y
-    )
+    )+
+    geom_hline(yintercept = 0,colour = "black",linetype = 2)
 })
 
 fillCol(flex = c(1,NA),
@@ -453,8 +473,6 @@ div(
 
 **volcano** and **MA plots** - In these three, can click the point and build a table of DE genes. To change the scale of the figure: brush and double click. If you double click without brush that will restart to the initial plot. Just click on a gene to label it, the results are stored in both **heatmaps** and **Gene table**.
 
-===
-
 **Sidebar**
 
 * False discovery rate: The smaller, the test results are more conservative
@@ -463,14 +481,7 @@ div(
 
 * Clean gene list: To start over again
 
-
-
-
-```{r}
-renderText({
-  "File saved in ..."
-})
-```
+* Save genes and file: When some genes are selected from the volcano or MA plots,this button will save the list in the file
 
 
 
