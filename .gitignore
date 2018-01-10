@@ -5,3 +5,6 @@ figs/*
 reports/*
 .Rproj.user
 EBV_NOK.Rproj
+.DS_Store
+.Rhistory
+apps/*.zip
