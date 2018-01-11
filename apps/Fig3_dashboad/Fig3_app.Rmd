@@ -359,15 +359,21 @@ output$volcano_ebv = renderPlot({
     ggplot(aes(log2FoldChange,log10pval,
                colour = if_else(padj <= input$fdr,"yes","no")))+
     geom_point(size = input$ps,alpha = .75)+
-    geom_text_repel(data = both_data,aes(label = gene_id),
-                    colour = gene_colors[1],
-                    size = 4)+
-    geom_text_repel(data = ebv_data,aes(label = gene_id),
-                    colour = gene_colors[2],
-                    size = 4)+
-    geom_text_repel(data = noks_data,aes(label = gene_id),
-                    colour = gene_colors[3],
-                    size = 4)+
+    geom_label_repel(data = both_data,
+                    colour = 'white', fill = gene_colors[1],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = ebv_data,
+                    colour = 'white', fill = gene_colors[2],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = noks_data,
+                    colour = 'white', fill = gene_colors[3],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = volcano_ebv_ranges$x ,
@@ -434,15 +440,21 @@ output$volcano_noks = renderPlot({
     ggplot(aes(log2FoldChange,log10pval,
                colour = if_else(padj <= input$fdr,"yes","no")))+
     geom_point(size = input$ps,alpha = .75)+
-    geom_text_repel(data = both_data,aes(label = gene_id),
-                    colour = gene_colors[1],
-                    size = 4)+
-    geom_text_repel(data = ebv_data,aes(label = gene_id),
-                    colour = gene_colors[2],
-                    size = 4)+
-    geom_text_repel(data = noks_data,aes(label = gene_id),
-                    colour = gene_colors[3],
-                    size = 4)+
+    geom_label_repel(data = both_data,
+                    colour = 'white', fill = gene_colors[1],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = ebv_data,
+                    colour = 'white', fill = gene_colors[2],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = noks_data,
+                    colour = 'white', fill = gene_colors[3],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = volcano_noks_ranges$x ,
@@ -511,15 +523,21 @@ output$ma_ebv = renderPlot({
     ggplot(aes(A,M,
                colour = if_else(padj <= input$fdr,"yes","no")))+
     geom_point(size = input$ps,alpha = .75)+
-    geom_text_repel(data = both_data,aes(label = gene_id),
-                    colour = gene_colors[1],
-                    size = 4)+
-    geom_text_repel(data = ebv_data,aes(label = gene_id),
-                    colour = gene_colors[2],
-                    size = 4)+
-    geom_text_repel(data = noks_data,aes(label = gene_id),
-                    colour = gene_colors[3],
-                    size = 4)+
+    geom_label_repel(data = both_data,
+                    colour = 'white', fill = gene_colors[1],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = ebv_data,
+                    colour = 'white', fill = gene_colors[2],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = noks_data,
+                    colour = 'white', fill = gene_colors[3],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = ma_ebv_ranges$x ,
@@ -585,15 +603,21 @@ output$ma_noks = renderPlot({
     ggplot(aes(A,M,
                colour = if_else(padj <= input$fdr,"yes","no")))+
     geom_point(size = input$ps,alpha = .75)+
-    geom_text_repel(data = both_data,aes(label = gene_id),
-                    colour = gene_colors[1],
-                    size = 4)+
-    geom_text_repel(data = ebv_data,aes(label = gene_id),
-                    colour = gene_colors[2],
-                    size = 4)+
-    geom_text_repel(data = noks_data,aes(label = gene_id),
-                    colour = gene_colors[3],
-                    size = 4)+
+    geom_label_repel(data = both_data,
+                    colour = 'white', fill = gene_colors[1],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = ebv_data,
+                    colour = 'white', fill = gene_colors[2],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
+    geom_label_repel(data = noks_data,
+                    colour = 'white', fill = gene_colors[3],
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = 4)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = ma_noks_ranges$x ,
