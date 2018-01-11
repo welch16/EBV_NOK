@@ -13,7 +13,7 @@ load("fig3data.RData")
 ## block to check if the packages are installed
 list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
                       "rmarkdown","flexdashboard","d3heatmap",
-                      "shinythemes","DT","RColorBrewer")
+                      "shinythemes","DT","RColorBrewer","hexbin")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -112,15 +112,15 @@ stri_subset = function(string,pattern)
   string[! str_detect(string,pattern)]
 }
 
-tpmmat = rsem_data %>% 
-  select(file,rsem) %>% 
-  unnest() %>% 
-  select(file,gene_id,TPM) %>% 
-  spread(file,TPM) %>% 
-  as.data.frame() %>% 
-  tibble::remove_rownames() %>% 
-  tibble::column_to_rownames("gene_id") %>% 
-  as.matrix()
+# tpmmat = rsem_data %>% 
+#   select(file,rsem) %>% 
+#   unnest() %>% 
+#   select(file,gene_id,TPM) %>% 
+#   spread(file,TPM) %>% 
+#   as.data.frame() %>% 
+#   tibble::remove_rownames() %>% 
+#   tibble::column_to_rownames("gene_id") %>% 
+#   as.matrix()
 
 ```
     
@@ -141,16 +141,9 @@ Inputs {.sidebar}
   
   radioButtons("heatmap_type", "Heatmap type type",
             c("most DE", "selected"), inline = TRUE)
-  
-  selectizeInput("genes_used","Genes used",
-                 choices = c("All",pluck(diff_genes,"cell")))
-  
+
   numericInput("heatmap_most","Most DE genes",10,
                min = 5,max = 100,step = 1)
-  
-  hr()
-  
-  actionButton("match","Match gene lists")
   
   hr()
   
@@ -159,10 +152,17 @@ Inputs {.sidebar}
   
   ## fix these
   observeEvent(input$save,{
-    if(!is.null(my_genes$ensembl)){
-      to_save = diff_genes %>% 
-        filter(ensembl %in% my_genes$ensembl)
-      
+    if(!is.null(ebv_genes$ensembl) | 
+       !is.null(noks_genes$ensembl)){
+      to_save = bind_rows(
+        EBV_genes %>% 
+          filter(ensembl %in% ebv_genes$ensembl) %>% 
+          mutate(cell = "EBV"),
+        NOKS_genes %>% 
+          filter(ensembl %in% noks_genes$ensembl) %>% 
+          mutate(cell = "NOKS")) %>% 
+        select(cell,everything())
+
       write_tsv(to_save,input$file)
       
     }
@@ -615,78 +615,144 @@ fillCol(flex = c(1,NA),
 
 ```
 
+### EBV heatmap
 
-### Model heatmap EBV
+```{r ebv_heatmap}
 
-```{r model_heatmap}
+renderD3heatmap({
 
-# renderD3heatmap({
-#   
-#   my_mat = rlogmat1
-#   
-#   if(input$heatmap_type == "most DE"){
-#     genes = diff_genes %>% 
-#       arrange(desc(log10pval)) %>% 
-#       head(input$heatmap_most )
-#     
-#       idx = genes %>% 
-#         mutate(
-#           idx = paste(ensembl,gene_id,sep = "_")
-#         ) %>% 
-#         pluck("idx")
-#       my_mat = my_mat[rownames(my_mat) %in% idx, ]
-#     
-#   }else{
-#     if(is.null(my_genes$ensembl)){
-#       my_mat = my_mat[sample(nrow(my_mat),3),]
-#     }else{
-#       genes = diff_genes %>% 
-#         filter(ensembl %in% my_genes$ensembl)
-#     
-#       idx = genes %>% 
-#         mutate(
-#           idx = paste(ensembl,gene_id,sep = "_")
-#         ) %>% 
-#         pluck("idx")
-#       my_mat = my_mat[rownames(my_mat) %in% idx, ]
-#     }
-#     
-#   }
-#   rownames(my_mat) = rownames(my_mat) %>% 
-#     str_split("_") %>% 
-#     map_chr( ~ .[2])
-#   
-#   colnames(my_mat) = colnames(my_mat) %>% 
-#     str_replace("RNAseq-","")
-#   
-#   pal = viridis(100)
-#   
-#   d3heatmap(my_mat,
-#             colors = pal,
-#             xaxis_font_size = 12,
-#             yaxis_font_size = 12)
-# })
+  my_mat = rlogmat
+
+  if(input$heatmap_type == "most DE"){
+    genes = EBV_genes %>%
+      arrange(desc(log10pval)) %>%
+      head(input$heatmap_most )
+
+      idx = genes %>%
+        mutate(
+          idx = paste(ensembl,gene_id,sep = "_")
+        ) %>%
+        pluck("idx")
+      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+
+  }else{
+    if(is.null(ebv_genes$ensembl)){
+      my_mat = my_mat[sample(nrow(my_mat),3),]
+    }else{
+      genes = EBV_genes %>%
+        filter(ensembl %in% ebv_genes$ensembl)
+
+      idx = genes %>%
+        mutate(
+          idx = paste(ensembl,gene_id,sep = "_")
+        ) %>%
+        pluck("idx")
+      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+    }
+
+  }
+  rownames(my_mat) = rownames(my_mat) %>%
+    str_split("_") %>%
+    map_chr( ~ .[2])
+
+  colnames(my_mat) = colnames(my_mat) %>%
+    str_replace("RNAseq-","")
+
+  pal = viridis(100)
+
+  d3heatmap(my_mat,
+            colors = pal,
+            xaxis_font_size = 12,
+            yaxis_font_size = 12)
+})
 
 
 ```
 
-### Model Heatmap NOKS
+### NOKS heatmap
+
+```{r noks_heatmap}
+
+renderD3heatmap({
+
+  my_mat = rlogmat
+
+  if(input$heatmap_type == "most DE"){
+    genes = NOKS_genes %>%
+      arrange(desc(log10pval)) %>%
+      head(input$heatmap_most )
+
+      idx = genes %>%
+        mutate(
+          idx = paste(ensembl,gene_id,sep = "_")
+        ) %>%
+        pluck("idx")
+      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+
+  }else{
+    if(is.null(noks_genes$ensembl)){
+      my_mat = my_mat[sample(nrow(my_mat),3),]
+    }else{
+      genes = NOKS_genes %>%
+        filter(ensembl %in% noks_genes$ensembl)
+
+      idx = genes %>%
+        mutate(
+          idx = paste(ensembl,gene_id,sep = "_")
+        ) %>%
+        pluck("idx")
+      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+    }
+
+  }
+  rownames(my_mat) = rownames(my_mat) %>%
+    str_split("_") %>%
+    map_chr( ~ .[2])
+
+  colnames(my_mat) = colnames(my_mat) %>%
+    str_replace("RNAseq-","")
+
+  pal = viridis(100)
+
+  d3heatmap(my_mat,
+            colors = pal,
+            xaxis_font_size = 12,
+            yaxis_font_size = 12)
+})
 
 
-### Genes table
+```
 
-```{r table}  
-##actionLink("generate","Generate gene list!")
 
-# div(
-#   renderDataTable(
-#     diff_genes %>% 
-#       filter(ensembl %in% my_genes$ensembl) %>% 
-#       select(gene_id,ensembl,padj,log10pval,EBV,NOKS,stat),
-#     options = list(
-#       pageLength = 10,
-#       lengthMenu = c(10,20,50,100)
-#     ) ) ,style = "font-size:80%")
+### EBV genes 
+
+```{r ebv_genes}  
+
+div(
+  renderDataTable(
+    EBV_genes %>%
+      filter(ensembl %in% ebv_genes$ensembl) %>%
+      select(gene_id,ensembl,padj,log10pval,MC,none,stat),
+    options = list(
+      pageLength = 10,
+      lengthMenu = c(10,20,50,100)
+    ) ) ,style = "font-size:80%")
+
+```
+
+### NOKS genes
+
+```{r noks_genes}  
+
+div(
+  renderDataTable(
+    NOKS_genes %>%
+      filter(ensembl %in% noks_genes$ensembl) %>%
+      select(gene_id,ensembl,padj,log10pval,MC,none,stat),
+    options = list(
+      pageLength = 10,
+      lengthMenu = c(10,20,50,100)
+    ) ) ,style = "font-size:80%")
 
 ```
 
@@ -697,6 +763,10 @@ fillCol(flex = c(1,NA),
 **p.values** - Also fixed, there is no deviation of the assumptions. Both look like they are supposed: a peak at zero and then approx. uniform. A quick note, is that the peak at zero is really tall, which means that there are a lot of diff. expressed genes. We may want to use smaller values for setting the FDR (by default 1e-20).
 
 **volcano** and **MA plots** - In these plots, can click the point and build a table of DE genes. To change the scale of the figure: brush and double click. If you double click without brush that will restart to the initial plot. Just click on a gene to label it, the results are stored in both **heatmaps** and **Gene table**. Removed the MA-DESeq plot because it didn't seem very useful.
+
+**heatmaps** The TPM heatmaps from fig2 were hard to distinguish, so I tought it would be better to remove them, and only keep the model ones (is the same model for both, the differences are going to be the p.value used to rank or the genes selected)
+
+**tables** They are separated for display, but the `save genes` button will save everything in the genes file
 
 **Sidebar**
 
