@@ -13,7 +13,7 @@ load("fig2data.RData")
 ## block to check if the packages are installed
 list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
                       "rmarkdown","flexdashboard","d3heatmap",
-                      "shinythemes","DT","RColorBrewer")
+                      "shinythemes","DT","RColorBrewer","extrafontdb")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -90,24 +90,25 @@ Inputs {.sidebar}
 
   numericInput("fdr","False Discovery Rate",0.05,
                min = 1e-6,max = 1,step = .01)
-  numericInput("ps","Point size",4,
-               min = .5,max = 20,step = .5)
-  
+  numericInput("ps","Point size",4)
+  numericInput("ts","Axis ticks size",12)
+  numericInput("Ts","Axis title size",16)
+  numericInput("ls","Label size",6)
   hr()
-  
-  actionButton("clean","Clean Gene List")
   
   radioButtons("heatmap_type", "Heatmap type type",
             c("most DE", "selected"), inline = TRUE)
   
-  numericInput("heatmap_most","Most DE genes",10,
-               min = 5,max = 100,step = 1)
+  numericInput("heatmap_most","Most DE genes",10)
   
   hr()
   
-  actionButton("save","Save genes")
   textInput("file",label = "Genes file", value = "fig2_genes.tsv")
   
+  fillRow(
+    actionButton("save","Save",width = "50%"),
+    actionButton("clean","Clean",width = "50%"))
+
   observeEvent(input$save,{
     if(!is.null(my_genes$ensembl)){
       to_save = diff_genes %>% 
@@ -117,15 +118,6 @@ Inputs {.sidebar}
       
     }
   })
-  
-  ## action button events  
-  #  ntext <- eventReactive(input$goButton, {
-  #   input$n
-  # })
-  # 
-  # output$nText <- renderText({
-  #   ntext()
-  # })
   
   observeEvent(input$clean,{
     my_genes$ensembl <- NULL
@@ -197,35 +189,61 @@ observeEvent(input$volcano_click,{
   my_genes$ensembl <- c(my_genes$ensembl, ff$ensembl)
 })
 
-output$volcano = renderPlot({
-  
+volcano = reactive({
   gene_data = diff_genes %>% 
     filter(ensembl %in% my_genes$ensembl)
 
   diff_genes %>%
-    ggplot(aes(log2FoldChange,log10pval,
-               colour = if_else(padj <= input$fdr,"yes","no")))+
-    geom_point(size = input$ps,alpha = .75)+
-    geom_text_repel(data = gene_data,aes(label = gene_id),colour = "black",
-                    size = 4)+
+    ggplot(aes(log2FoldChange,log10pval))+
+    geom_point(size = input$ps,alpha = .75,
+               aes(colour = if_else(padj <= input$fdr,"yes","no")))+
+    geom_label_repel(data = gene_data,
+                  colour = 'white', fill = "black",
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = input$ls)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = volcano_ranges$x ,
       ylim = volcano_ranges$y
     )+
+    theme(
+      axis.text = element_text(size = input$ts),
+      axis.title = element_text(size = input$Ts),
+      legend.text = element_text(size = input$ts),
+      legend.title = element_text(size = input$ts)
+    )+
     ylab("-log10(pvalue)")+
     geom_vline(xintercept = 0,colour = "black",linetype = 2)
 })
 
-fillCol(flex = c(1,NA),
+output$volcano = renderPlot(volcano())
+
+fillCol(flex = c(1,.1),
         plotOutput("volcano",
                    click = "volcano_click",
                    dblclick = "volcano_dblclick",
                    brush = brushOpts(
                      id = "volcano_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("volcano_save","",icon = icon("camera")),
+          numericInput("volcano_width","Volcano width (in)",7),
+          numericInput("volcano_height","Volcano height (in)",7),
+          textInput("volcano_file","Volcano file","volcano_file.pdf")))
+
+observeEvent(input$volcano_save,{
+
+  ggsave(
+    plot = volcano(),
+    filename = input$volcano_file,
+    width = unit(input$volcano_width,"in"),
+    height = unit(input$volcano_height, "in")
+    
+  )
+
+})
 
 
 ```
@@ -253,34 +271,64 @@ observeEvent(input$MA1_click,{
   my_genes$ensembl <- c(my_genes$ensembl, ff$ensembl)
 })
 
-output$MA1 = renderPlot({
-  
+MA1 = reactive({
   gene_data = diff_genes %>% 
     filter(ensembl %in% my_genes$ensembl)
   
   diff_genes %>% 
     ggplot(aes(baseMean,log2FoldChange))+
+    geom_point(size = input$ps,alpha = .75,
+               aes(colour = if_else(padj <= input$fdr,"yes","no")))+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
-    geom_point(aes(colour = if_else(padj <= input$fdr,"yes","no")),
-               alpha = .75,size = input$ps)+
-    geom_text_repel(data = gene_data,aes(label = gene_id),colour = "black",
-                    size = 4)+
+    geom_label_repel(data = gene_data,
+                  colour = 'white', fill = "black",
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = input$ls)+
+    scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
-      xlim = MA1_ranges$x,
+      xlim = MA1_ranges$x ,
       ylim = MA1_ranges$y
     )+
+    theme(
+      axis.text = element_text(size = input$ts),
+      axis.title = element_text(size = input$Ts),
+      legend.text = element_text(size = input$ts),
+      legend.title = element_text(size = input$ts)
+    )+
+    ylab("-log10(pvalue)")+
     geom_hline(yintercept = 0,colour = "black",linetype = 2)
+  
 })
 
-fillCol(flex = c(1,NA),
+output$MA1 = renderPlot(MA1())
+
+fillCol(flex = c(1,.1),
         plotOutput("MA1",
                    click = "MA1_click",
                    dblclick = "MA1_dblclick",
                    brush = brushOpts(
                      id = "MA1_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                   )),
+        fillRow(
+          actionButton("ma1_save","Generate plot!"),
+          numericInput("ma1_width","MA width (in)",7),
+          numericInput("ma1_height","MA height (in)",7),
+          textInput("ma1_file","MA-plot file","ma1_file.pdf")))
+
+observeEvent(input$ma1_save,{
+
+  ggsave(
+    plot = MA1(),
+    filename = input$ma1_file,
+    width = unit(input$ma1_width,"in"),
+    height = unit(input$ma1_height, "in")
+    
+  )
+
+})
+
 
 ```
 
@@ -307,34 +355,64 @@ observeEvent(input$MA2_click,{
   my_genes$ensembl <- c(my_genes$ensembl, ff$ensembl)
 })
 
-output$MA2 = renderPlot({
-  
-  gene_data = diff_genes %>% 
+MA2 = reactive({
+    gene_data = diff_genes %>% 
     filter(ensembl %in% my_genes$ensembl)
   
   diff_genes %>% 
     ggplot(aes(A,M))+
-    scale_color_brewer(palette = "Set1", name = "Diff. Expressed")+
-    geom_point(aes(colour = if_else(padj <= input$fdr,"yes","no")),
-               alpha = .75,size = input$ps)+
-    geom_text_repel(data = gene_data,aes(label = gene_id),colour = "black",
-                    size = 4)+
+    geom_point(size = input$ps,alpha = .75,
+               aes(colour = if_else(padj <= input$fdr,"yes","no")))+
+    scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
+    geom_label_repel(data = gene_data,
+                  colour = 'white', fill = "black",
+                    box.padding = 0.35, point.padding = 0.5,
+                    segment.color = 'grey50',
+                    aes(label = gene_id),size = input$ls)+
+    scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
-      xlim = MA2_ranges$x,
+      xlim = MA2_ranges$x ,
       ylim = MA2_ranges$y
     )+
+    theme(
+      axis.text = element_text(size = input$ts),
+      axis.title = element_text(size = input$Ts),
+      legend.text = element_text(size = input$ts),
+      legend.title = element_text(size = input$ts)
+    )+
+    ylab("-log10(pvalue)")+
     geom_hline(yintercept = 0,colour = "black",linetype = 2)
+
 })
 
-fillCol(flex = c(1,NA),
+output$MA2 = renderPlot(MA2())
+
+fillCol(flex = c(1,.1),
         plotOutput("MA2",
                    click = "MA2_click",
                    dblclick = "MA2_dblclick",
                    brush = brushOpts(
                      id = "MA2_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                     )),
+        fillRow(
+          actionButton("ma2_save","Generate plot!"),
+          numericInput("ma2_width","MA width (in)",7),
+          numericInput("ma2_height","MA height (in)",7),
+          textInput("ma2_file","MA-plot file","ma2_file.pdf")))
+
+observeEvent(input$ma2_save,{
+
+  ggsave(
+    plot = MA2(),
+    filename = input$ma2_file,
+    width = unit(input$ma2_width,"in"),
+    height = unit(input$ma2_height, "in")
+    
+  )
+
+})
+
 
 
 ```
