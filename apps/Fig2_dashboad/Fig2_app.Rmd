@@ -25,6 +25,8 @@ library(shiny)
 library(d3heatmap)
 
 my_alpha = .5
+my_style = "color: #FFFFFF; background-color: #FF0000"
+my_style2 = "color: #FFFFFF; background-color: #357EC7"
 
 theme_set(
   theme_bw()+
@@ -105,9 +107,13 @@ Inputs {.sidebar}
   
   textInput("file",label = "Genes file", value = "fig2_genes.tsv")
   
-  fillRow(
-    actionButton("save","Save",width = "50%"),
-    actionButton("clean","Clean",width = "50%"))
+  
+  
+  fillRow(flex = c(.5,.5),
+    actionButton("save"," Save",icon = icon("floppy-o"),
+                       style = my_style2),
+    actionButton("clean"," Clean",icon = icon("window-close"),
+                       style = my_style2))
 
   observeEvent(input$save,{
     if(!is.null(my_genes$ensembl)){
@@ -228,7 +234,8 @@ fillCol(flex = c(1,.1),
                      resetOnNew = TRUE
                      )),
         fillRow(flex = c(.1,.3,.3,.3),
-          actionButton("volcano_save","",icon = icon("camera")),
+          actionButton("volcano_save","",icon = icon("camera"),
+                       style = my_style),
           numericInput("volcano_width","Volcano width (in)",7),
           numericInput("volcano_height","Volcano height (in)",7),
           textInput("volcano_file","Volcano file","volcano_file.pdf")))
@@ -311,8 +318,9 @@ fillCol(flex = c(1,.1),
                      id = "MA1_brush",
                      resetOnNew = TRUE
                    )),
-        fillRow(
-          actionButton("ma1_save","Generate plot!"),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("ma1_save","",icon = icon("camera"),
+                       style = my_style),
           numericInput("ma1_width","MA width (in)",7),
           numericInput("ma1_height","MA height (in)",7),
           textInput("ma1_file","MA-plot file","ma1_file.pdf")))
@@ -395,8 +403,9 @@ fillCol(flex = c(1,.1),
                      id = "MA2_brush",
                      resetOnNew = TRUE
                      )),
-        fillRow(
-          actionButton("ma2_save","Generate plot!"),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("ma2_save","",icon = icon("camera"),
+                       style = my_style),
           numericInput("ma2_width","MA width (in)",7),
           numericInput("ma2_height","MA height (in)",7),
           textInput("ma2_file","MA-plot file","ma2_file.pdf")))
