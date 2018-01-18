@@ -303,7 +303,6 @@ MA1 = reactive({
       legend.text = element_text(size = input$ts),
       legend.title = element_text(size = input$ts)
     )+
-    ylab("-log10(pvalue)")+
     geom_hline(yintercept = 0,colour = "black",linetype = 2)
   
 })
@@ -388,7 +387,6 @@ MA2 = reactive({
       legend.text = element_text(size = input$ts),
       legend.title = element_text(size = input$ts)
     )+
-    ylab("-log10(pvalue)")+
     geom_hline(yintercept = 0,colour = "black",linetype = 2)
 
 })
