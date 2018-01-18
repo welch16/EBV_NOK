@@ -13,7 +13,8 @@ load("fig3data.RData")
 ## block to check if the packages are installed
 list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
                       "rmarkdown","flexdashboard","d3heatmap",
-                      "shinythemes","DT","RColorBrewer","hexbin")
+                      "shinythemes","DT","RColorBrewer","hexbin",
+                      "extrafontdb")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -26,6 +27,9 @@ library(d3heatmap)
 
 my_alpha = .5
 pal = viridis(1000)
+my_style = "color: #FFFFFF; background-color: #FF0000"
+my_style2 = "color: #FFFFFF; background-color: #357EC7"
+
 
 theme_set(
   theme_bw()+
@@ -132,13 +136,12 @@ Inputs {.sidebar}
 
   numericInput("fdr","False Discovery Rate",1e-20,
                min = 1e-6,max = 1,step = .01)
-  numericInput("ps","Point size",4,
-               min = .5,max = 20,step = .5)
-  
+  numericInput("ps","Point size",4)
+  numericInput("ts","Axis ticks size",12)
+  numericInput("Ts","Axis title size",16)
+  numericInput("ls","Label size",6)
   hr()
-  
-  actionButton("clean","Clean Gene List")
-  
+
   radioButtons("heatmap_type", "Heatmap type type",
             c("most DE", "selected"), inline = TRUE)
 
@@ -147,9 +150,15 @@ Inputs {.sidebar}
   
   hr()
   
-  actionButton("save","Save genes")
   textInput("file",label = "Genes file", value = "fig3_genes.tsv")
+  fillRow(flex = c(.5,.5),
+    actionButton("save"," Save",icon = icon("floppy-o"),
+                       style = my_style2),
+    actionButton("clean"," Clean",icon = icon("window-close"),
+                       style = my_style2))
+
   
+    
   ## fix these
   observeEvent(input$save,{
     if(!is.null(ebv_genes$ensembl) | 
@@ -248,8 +257,7 @@ observeEvent(input$log2fc_click,{
   noks_genes$ensembl <- c(noks_genes$ensembl, ff$ensembl_id)
 })
 
-
-output$log2fc = renderPlot({
+log2FC = reactive({
 
   both = intersect(ebv_genes$ensembl,
                    noks_genes$ensembl)
@@ -273,41 +281,61 @@ output$log2fc = renderPlot({
                          guide = guide_colourbar(title = NULL,
                            barheight = unit(0.92,"npc"),
                            barwidth = unit(0.01,"npc")))+
-  theme(legend.position = "right")+
+  theme(legend.position = "right",
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
   coord_cartesian(
     xlim = log2fc_ranges$x,
     ylim = log2fc_ranges$y)+
+    geom_abline(slope = 1,intercept = 0,linetype =2)+
     geom_vline(xintercept = 0,linetype = 2,colour = "red")+
     geom_hline(yintercept = 0,linetype = 2,colour = "red")+
     geom_label_repel(data = both_data,
                     colour = 'white', fill = gene_colors[1],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = ebv_data,
                     colour = 'white', fill = gene_colors[2],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = noks_data,
                     colour = 'white', fill = gene_colors[3],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)
+                    aes(label = gene_id),size = input$ls)
 
 })
+
+
+output$log2fc = renderPlot(log2FC())
  
-fillCol(flex = c(1,NA),
+fillCol(flex = c(1,.1),
         plotOutput("log2fc",
                    click = "log2fc_click",
                    dblclick = "log2fc_dblclick",
                    brush = brushOpts(
                      id = "log2fc_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("log2fc_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("log2fc_width","Log2FC width (in)",7),
+          numericInput("log2fc_height","Log2FC height (in)",7),
+          textInput("log2fc_file","Log2FC file","log2fc_file.pdf")))
 
-
+observeEvent(input$log2fc_save,{
+  
+  ggsave(
+    plot = log2FC(),
+    filename = input$log2fc_file,
+    width = unit(input$log2fc_width,"in"),
+    height = unit(input$log2fc_height,"in")
+  )})
 
 
 
@@ -336,8 +364,7 @@ observeEvent(input$volcano_ebv_click,{
   ebv_genes$ensembl <- c(ebv_genes$ensembl, ff$ensembl)
 })
 
-
-output$volcano_ebv = renderPlot({
+volcano_EBV = reactive({
 
   both = intersect(ebv_genes$ensembl,
                    noks_genes$ensembl)
@@ -363,35 +390,59 @@ output$volcano_ebv = renderPlot({
                     colour = 'white', fill = gene_colors[1],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = ebv_data,
                     colour = 'white', fill = gene_colors[2],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = noks_data,
                     colour = 'white', fill = gene_colors[3],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = volcano_ebv_ranges$x ,
       ylim = volcano_ebv_ranges$y
     )+
+    theme(
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
     ylab("-log10(pvalue)")+
     geom_vline(xintercept = 0,colour = "black",linetype = 2)
+
 })
+
+output$volcano_ebv = renderPlot(volcano_EBV())
  
-fillCol(flex = c(1,NA),
+fillCol(flex = c(1,.1),
         plotOutput("volcano_ebv",
                    click = "volcano_ebv_click",
                    dblclick = "volcano_ebv_dblclick",
                    brush = brushOpts(
                      id = "volcano_ebv_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("volcano_ebv_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("volcano_ebv_width","Volcano EBV width (in)",7),
+          numericInput("volcano_ebv_height","Volcano EBV height (in)",7),
+          textInput("volcano_ebv_file","Volcano EBV file","volcano_ebv_file.pdf")))
+
+observeEvent(input$volcano_ebv_save,{
+  
+  ggsave(
+    plot = volcano_EBV(),
+    filename = input$volcano_ebv_file,
+    width = unit(input$volcano_ebv_width,"in"),
+    height = unit(input$volcano_ebv_height,"in")
+  )})
+
+
 
 
 ```
@@ -419,8 +470,7 @@ observeEvent(input$volcano_noks_click,{
   noks_genes$ensembl <- c(noks_genes$ensembl, ff$ensembl)
 })
 
-
-output$volcano_noks = renderPlot({
+volcano_NOKS = reactive({
 
   both = intersect(ebv_genes$ensembl,
                    noks_genes$ensembl)
@@ -444,35 +494,58 @@ output$volcano_noks = renderPlot({
                     colour = 'white', fill = gene_colors[1],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = ebv_data,
                     colour = 'white', fill = gene_colors[2],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = noks_data,
                     colour = 'white', fill = gene_colors[3],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = volcano_noks_ranges$x ,
       ylim = volcano_noks_ranges$y
     )+
     ylab("-log10(pvalue)")+
+    theme(
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
     geom_vline(xintercept = 0,colour = "black",linetype = 2)
+  
 })
+
+output$volcano_noks = renderPlot(volcano_NOKS())
  
-fillCol(flex = c(1,NA),
+fillCol(flex = c(1,.1),
         plotOutput("volcano_noks",
                    click = "volcano_noks_click",
                    dblclick = "volcano_noks_dblclick",
                    brush = brushOpts(
                      id = "volcano_noks_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("volcano_noks_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("volcano_noks_width","Volcano NOKS width (in)",7),
+          numericInput("volcano_noks_height","Volcano NOKS height (in)",7),
+          textInput("volcano_noks_file","Volcano NOKS file","volcano_noks_file.pdf")))
+
+observeEvent(input$volcano_noks_save,{
+  
+  ggsave(
+    plot = volcano_NOKS(),
+    filename = input$volcano_noks_file,
+    width = unit(input$volcano_noks_width,"in"),
+    height = unit(input$volcano_noks_height,"in")
+  )})
+        
 
 
 ```
@@ -500,8 +573,7 @@ observeEvent(input$ma_ebv_click,{
   ebv_genes$ensembl <- c(ebv_genes$ensembl, ff$ensembl)
 })
 
-
-output$ma_ebv = renderPlot({
+MA_EBV = reactive({
 
   both = intersect(ebv_genes$ensembl,
                    noks_genes$ensembl)
@@ -527,34 +599,56 @@ output$ma_ebv = renderPlot({
                     colour = 'white', fill = gene_colors[1],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = ebv_data,
                     colour = 'white', fill = gene_colors[2],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = noks_data,
                     colour = 'white', fill = gene_colors[3],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = ma_ebv_ranges$x ,
       ylim = ma_ebv_ranges$y
     )+
+    theme(
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
     geom_hline(yintercept = 0,colour = "black",linetype = 2)
+  
 })
+
+output$ma_ebv = renderPlot(MA_EBV())
  
-fillCol(flex = c(1,NA),
+fillCol(flex = c(1,.1),
         plotOutput("ma_ebv",
                    click = "ma_ebv_click",
                    dblclick = "ma_ebv_dblclick",
                    brush = brushOpts(
                      id = "ma_ebv_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("ma_ebv_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("ma_ebv_width","MA EBV width (in)",7),
+          numericInput("ma_ebv_height","MA EBV height (in)",7),
+          textInput("ma_ebv_file","MA EBV file","ma_ebv_file.pdf")))
+
+observeEvent(input$ma_ebv_save,{
+  
+  ggsave(
+    plot = MA_EBV(),
+    filename = input$ma_ebv_file,
+    width = unit(input$ma_ebv_width,"in"),
+    height = unit(input$ma_ebv_height,"in")
+  )})
 
 
 ```
@@ -582,8 +676,7 @@ observeEvent(input$ma_noks_click,{
   noks_genes$ensembl <- c(noks_genes$ensembl, ff$ensembl)
 })
 
-
-output$ma_noks = renderPlot({
+MA_NOKS = reactive({
 
   both = intersect(ebv_genes$ensembl,
                    noks_genes$ensembl)
@@ -607,34 +700,57 @@ output$ma_noks = renderPlot({
                     colour = 'white', fill = gene_colors[1],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = ebv_data,
                     colour = 'white', fill = gene_colors[2],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     geom_label_repel(data = noks_data,
                     colour = 'white', fill = gene_colors[3],
                     box.padding = 0.35, point.padding = 0.5,
                     segment.color = 'grey50',
-                    aes(label = gene_id),size = 4)+
+                    aes(label = gene_id),size = input$ls)+
     scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
     coord_cartesian(
       xlim = ma_noks_ranges$x ,
       ylim = ma_noks_ranges$y
     )+
+    theme(
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
     geom_hline(yintercept = 0,colour = "black",linetype = 2)
+  
+  
 })
+
+output$ma_noks = renderPlot(MA_NOKS())
  
-fillCol(flex = c(1,NA),
+fillCol(flex = c(1,.1),
         plotOutput("ma_noks",
                    click = "ma_noks_click",
                    dblclick = "ma_noks_dblclick",
                    brush = brushOpts(
                      id = "ma_noks_brush",
                      resetOnNew = TRUE
-                     ))
-        )
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("ma_noks_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("ma_noks_width","MA NOKS width (in)",7),
+          numericInput("ma_noks_height","MA NOKS height (in)",7),
+          textInput("ma_noks_file","MA NOKS file","ma_noks_file.pdf")))
+
+observeEvent(input$ma_noks_save,{
+  
+  ggsave(
+    plot = MA_NOKS(),
+    filename = input$ma_noks_file,
+    width = unit(input$ma_noks_width,"in"),
+    height = unit(input$ma_noks_height,"in")
+  )})        
 
 
 ```
