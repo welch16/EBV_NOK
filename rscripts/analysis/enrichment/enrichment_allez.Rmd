@@ -8,6 +8,8 @@ vignette: |
   %\VignetteEncoding{UTF-8}
 ---
 
+(Repeat with data if figure 3 )
+
 ```{r start,include=FALSE,echo = FALSE,eval = TRUE}
 library(tidyverse)
 library(allez)
@@ -51,7 +53,7 @@ pluck_gene_scores = function(my_genes)
 
 gene_scores = map(gene_list, pluck_gene_scores) 
  
-
+pval_thr = 0.1
 
 ```
 
@@ -84,7 +86,7 @@ $$
 
 This is the discrete version of the model, but we are going to use the continuous version based in the log2FC between EBV and NOKS samples (i.e. the same results from Fig 2). This method can't use __MolSigDB__, which is the database that is used by GSEA, but the ones with used __GO__ and __KEGG__ are parts of it.
 
-We divided the genes in three sets:
+We filtered the genes by selecting the ones with $\mbox{pvalue} \leq `r pval_thr`$, and then divided the genes in three sets:
 
 - All genes
 
