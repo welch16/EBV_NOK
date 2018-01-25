@@ -1,0 +1,159 @@
+---
+title: "Enrichment analysis with Allez"
+output:
+  BiocStyle::html_document
+vignette: |
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r start,include=FALSE,echo = FALSE,eval = TRUE}
+library(DESeq2)
+library(tidyverse)
+library(clusterProfiler)
+library(allez)
+
+load(here::here("apps/Fig2_dashboad/fig2data.RData"))
+
+## tidy outcome of DESeq2 hypothesis tests
+diff_genes = diff_genes %>% 
+  separate(gene_id , into = c("ENSEMBL_ID","SYMBOL"), sep = "\\_") 
+
+## remove genes with duplicated symbols
+dup_symbols = diff_genes %>% 
+  group_by(SYMBOL) %>% 
+  summarize(n = n()) %>% 
+  filter(n > 1) %>% 
+  pluck("SYMBOL")
+
+diff_genes = diff_genes %>% 
+  filter(!SYMBOL %in% dup_symbols)
+
+
+gene_scores = diff_genes %>% 
+  pluck("stat") %>% 
+  set_names(
+    pluck(diff_genes,"SYMBOL")
+  )
+
+upregulated_genes = diff_genes %>% 
+  filter(log2FoldChange > 0) %>%
+  arrange(padj)
+
+gene_scores = upregulated_genes %>% 
+  pluck("stat") %>% 
+  set_names(
+    pluck(upregulated_genes,"SYMBOL")
+  )
+
+
+```
+
+# Introduction
+
+We used the results of the differential expression analysis between untreated samples of EBV vs NOKS cell lines to determine pathways in the KEGG and GO databases using `allez`. For this analysis, we had to remove the following genes:
+
+```{r dup_genes,include=FALSE,eval =TRUE,echo =TRUE}
+dup_symbols
+```
+
+In total, we are performing the pathway analysis with `r nrow(diff_genes)` genes.
+
+# Pathway analysis with Allez
+
+The general idea of this method, is that the pathway database is described by the $P\times W$ previously known incidence matrix: $$I=(I_{pw}) = \begin{cases} 1,& p\in w\\0&\text{otherwise}\end{cases}$$
+
+And we model a vector of measurements across different samples, or summary statistics $x = \{ x_p\}$, in our case this is the signal to noise measurement calculated for each gene. The main assumption is the __activation hypthesis__: 
+
+`A set of parts is active if and only if all the parts in the set are active`
+
+In the paper that I read (Newton et al, 2012) the model used is:
+
+$$
+\begin{align}
+Z_w &\sim \mbox{Ber}(\pi) \\
+X_p\vert Z_w = z_w &\sim \mbox{Ber}\left( \alpha + (\beta - \alpha )\max_{w:p\in w} z_w   \right)
+\end{align}
+$$
+
+This is the discrete version of the model, but we are going to use the continuous version based in the log2FC between EBV and NOKS samples (i.e. the same results from Fig 2). This method can't use __MolSigDB__, which is the database that is used by GSEA, but the ones with used __GO__ and __KEGG__ are parts of it.
+
+## Allez analysis with the GO database:
+
+```{r allez_go, include = TRUE,echo = TRUE,eval =TRUE,cache = TRUE,message=FALSE,warning=FALSE}
+
+allez_go = allez(gene_scores, "org.Hs.eg", idtype = "SYMBOL", 
+                 library.loc = NULL,
+                 sets = "GO", locallist = NULL,
+                 universe = "global",
+                 transform = c("none"), 
+                 annotate = TRUE)
+
+```
+
+
+```{r allez_go_table,include=FALSE,echo=FALSE,eval=TRUE,cache = TRUE,dependson="allez_go"}
+
+allez_go_table = allezTable(allez_go,symbol = TRUE)
+
+```
+
+
+```{r fig}
+
+allez_go_table %>% 
+  arrange(desc(z.score)) %>% 
+  head(30) %>% 
+  mutate(
+    Term = factor(Term,levels = Term)
+  ) %>% 
+  ggplot(aes(rev(Term),z.score,fill = Ontology))+
+  geom_bar(stat = "identity")+
+  coord_flip()+
+  scale_fill_brewer(palette = "Dark2")+
+  theme(legend.position = "top")
+
+
+
+
+```
+## Allez analysis with the KEGG database:
+
+
+```{r allez_kegg, include = TRUE,echo = TRUE,eval =TRUE,cache = TRUE,message=FALSE,warning=FALSE}
+
+
+allez_kegg = allez(gene_scores, "org.Hs.eg", idtype = "SYMBOL", 
+                 library.loc = NULL,
+                 sets = "KEGG", locallist = NULL,
+                 universe = "global",
+                 transform = c("none"), 
+                 annotate = TRUE)
+
+```
+
+```{r allez_kegg_table,include=FALSE,echo=FALSE,eval=TRUE,cache = TRUE,dependson="allez_kegg"}
+
+allez_kegg_table = allezTable(allez_kegg,symbol = TRUE)
+
+```
+
+
+```{r fig2}
+
+allez_kegg_table %>% 
+  arrange(desc(z.score)) %>% 
+  head(50) %>% 
+  mutate(
+    path_name = factor(path_name,levels = path_name)
+  ) %>% 
+  ggplot(aes(rev(path_name),z.score))+
+  geom_bar(stat = "identity")+
+  coord_flip()+
+  theme(legend.position = "top")
+
+
+
+
+```
