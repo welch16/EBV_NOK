@@ -9,9 +9,7 @@ vignette: |
 ---
 
 ```{r start,include=FALSE,echo = FALSE,eval = TRUE}
-library(DESeq2)
 library(tidyverse)
-library(clusterProfiler)
 library(allez)
 library(gridExtra)
 
