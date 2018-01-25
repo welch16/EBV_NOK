@@ -3,6 +3,7 @@ manuscript/logs/*
 notes/*
 figs/*
 rscripts/analysis/enrichment/*cache
+rscripts/analysis/enrichment/*files
 reports/*
 .Rproj.user
 EBV_NOK.Rproj

@@ -13,6 +13,10 @@ library(DESeq2)
 library(tidyverse)
 library(clusterProfiler)
 library(allez)
+library(gridExtra)
+
+z_thr = qnorm(.95)
+top_paths = 20
 
 load(here::here("apps/Fig2_dashboad/fig2data.RData"))
 
@@ -30,22 +34,25 @@ dup_symbols = diff_genes %>%
 diff_genes = diff_genes %>% 
   filter(!SYMBOL %in% dup_symbols)
 
+gene_list = list(
+  "all" = diff_genes,
+  "upreg" = diff_genes %>% 
+    filter(log2FoldChange > 0),
+  "downreg" = diff_genes %>% 
+    filter(log2FoldChange < 0)
+)
 
-gene_scores = diff_genes %>% 
-  pluck("stat") %>% 
-  set_names(
-    pluck(diff_genes,"SYMBOL")
-  )
+pluck_gene_scores = function(my_genes)
+{
+  my_genes %>% 
+    pluck("stat") %>% 
+    set_names(
+      pluck(my_genes,"SYMBOL")
+    )
+}
 
-upregulated_genes = diff_genes %>% 
-  filter(log2FoldChange > 0) %>%
-  arrange(padj)
-
-gene_scores = upregulated_genes %>% 
-  pluck("stat") %>% 
-  set_names(
-    pluck(upregulated_genes,"SYMBOL")
-  )
+gene_scores = map(gene_list, pluck_gene_scores) 
+ 
 
 
 ```
@@ -79,9 +86,19 @@ $$
 
 This is the discrete version of the model, but we are going to use the continuous version based in the log2FC between EBV and NOKS samples (i.e. the same results from Fig 2). This method can't use __MolSigDB__, which is the database that is used by GSEA, but the ones with used __GO__ and __KEGG__ are parts of it.
 
+We divided the genes in three sets:
+
+- All genes
+
+- EBV upregulated genes
+
+- EBV downregulated genes
+
+The default parameter to calculate filter the results is to use a z-score of $z_* = 5$, since we observed very few differentially expressed genes in this contrast, I used a very conservative threshold $z_*=`r round(z_thr,2)`$
+ 
 ## Allez analysis with the GO database:
 
-```{r allez_go, include = TRUE,echo = TRUE,eval =TRUE,cache = TRUE,message=FALSE,warning=FALSE}
+```{r allez_go_ghost , include=TRUE,echo = TRUE,eval= FALSE}
 
 allez_go = allez(gene_scores, "org.Hs.eg", idtype = "SYMBOL", 
                  library.loc = NULL,
@@ -90,39 +107,81 @@ allez_go = allez(gene_scores, "org.Hs.eg", idtype = "SYMBOL",
                  transform = c("none"), 
                  annotate = TRUE)
 
+
 ```
 
+
+```{r allez_go, include = FALSE,echo = FALSE,eval =TRUE,cache = TRUE,message=FALSE,warning=FALSE}
+
+allez_go = gene_scores %>% 
+  map(allez,"org.Hs.eg",idtype = "SYMBOL",
+      library.loc= NULL,
+      sets = "GO", locallist = NULL,
+      universe = "global",
+      transform = c("none"),
+      annotate = TRUE)
+
+```
 
 ```{r allez_go_table,include=FALSE,echo=FALSE,eval=TRUE,cache = TRUE,dependson="allez_go"}
 
-allez_go_table = allezTable(allez_go,symbol = TRUE)
+allez_go_table = allez_go %>% 
+  map(allezTable,symbol = TRUE, zthr = z_thr)
 
 ```
 
+```{r barplot_fun, include=FALSE,echo=FALSE,eval=TRUE}
 
-```{r fig}
+barplot_fun = function(alleztable,title,text_label,K = top_paths,to_color = NULL   )
+{
 
-allez_go_table %>% 
-  arrange(desc(z.score)) %>% 
-  head(30) %>% 
-  mutate(
-    Term = factor(Term,levels = Term)
-  ) %>% 
-  ggplot(aes(rev(Term),z.score,fill = Ontology))+
-  geom_bar(stat = "identity")+
-  coord_flip()+
-  scale_fill_brewer(palette = "Dark2")+
-  theme(legend.position = "top")
-
-
-
+  barplot = alleztable %>% 
+    tibble::rownames_to_column(var = "dbterm") %>% 
+    as_tibble() %>% 
+    top_n( K, z.score) %>% 
+    arrange(desc(z.score))
+  
+  fname = factor(barplot[[text_label]],levels = rev(barplot[[text_label]]))
+  
+  barplot[[text_label]] = fname
+  
+   
+  barplot = barplot %>% 
+    ggplot(aes_string(x = text_label,y = "z.score"))
+  
+  if(is.null(to_color)){
+    barplot = barplot +
+      geom_bar(stat = "identity")  
+  }else{
+    barplot = barplot +
+      geom_bar(stat = "identity",aes(fill = to_color))
+  }
+    
+  barplot + 
+    coord_flip()+ggtitle(title)+
+    theme(
+      legend.position = "top",
+      axis.title.y = element_blank()
+    )
+}
 
 ```
+
+```{r go_figs , include=TRUE,echo=FALSE,eval=TRUE,fig.width=7,fig.height=12}
+
+go_plots = map2(allez_go_table,c("All genes","EBV upregulated","EBV downregulated"),
+                barplot_fun,"Term",top_paths)
+
+grid.arrange(go_plots[[1]],go_plots[[2]],go_plots[[3]],ncol =1)
+```
+
+
+
+
 ## Allez analysis with the KEGG database:
 
 
-```{r allez_kegg, include = TRUE,echo = TRUE,eval =TRUE,cache = TRUE,message=FALSE,warning=FALSE}
-
+```{r allez_kegg_ghost,include=TRUE,echo=TRUE,eval=FALSE}
 
 allez_kegg = allez(gene_scores, "org.Hs.eg", idtype = "SYMBOL", 
                  library.loc = NULL,
@@ -133,27 +192,33 @@ allez_kegg = allez(gene_scores, "org.Hs.eg", idtype = "SYMBOL",
 
 ```
 
+
+```{r allez_kegg, include = FALSE,echo = FALSE,eval =TRUE,cache = TRUE,message=FALSE,warning=FALSE}
+
+allez_kegg = gene_scores %>% 
+  map(allez,"org.Hs.eg",idtype = "SYMBOL",
+      library.loc= NULL,
+      sets = "KEGG", locallist = NULL,
+      universe = "global",
+      transform = c("none"),
+      annotate = TRUE)
+
+```
+
 ```{r allez_kegg_table,include=FALSE,echo=FALSE,eval=TRUE,cache = TRUE,dependson="allez_kegg"}
 
-allez_kegg_table = allezTable(allez_kegg,symbol = TRUE)
+allez_kegg_table = allez_kegg %>% 
+  map(allezTable,symbol = TRUE, zthr = z_thr)
 
 ```
 
 
-```{r fig2}
+```{r kegg_figs , include=TRUE,echo=FALSE,eval=TRUE,fig.width=7,fig.height=12}
 
-allez_kegg_table %>% 
-  arrange(desc(z.score)) %>% 
-  head(50) %>% 
-  mutate(
-    path_name = factor(path_name,levels = path_name)
-  ) %>% 
-  ggplot(aes(rev(path_name),z.score))+
-  geom_bar(stat = "identity")+
-  coord_flip()+
-  theme(legend.position = "top")
+kegg_plots = map2(allez_kegg_table,c("All genes","EBV upregulated","EBV downregulated"),
+                barplot_fun,"path_name",top_paths)
 
-
-
-
+grid.arrange(kegg_plots[[1]],kegg_plots[[2]],kegg_plots[[3]],ncol =1)
 ```
+
+
