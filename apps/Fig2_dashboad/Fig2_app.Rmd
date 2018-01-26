@@ -106,13 +106,15 @@ Inputs {.sidebar}
   hr()
   
   textInput("file",label = "Genes file", value = "fig2_genes.tsv")
-  
-  
-  
-  fillRow(flex = c(.5,.5),
-    actionButton("save"," Save",icon = icon("floppy-o"),
+
+  hr()
+  textInput("loadfile",label = "Load genes",value = "fig2_genes.tsv")
+
+  fillRow(flex = c(.4,.4,.4),
+          actionButton("load","Load",icon = icon("folder-open-o"),style = my_style2),
+          actionButton("save"," Save",icon = icon("floppy-o"),
                        style = my_style2),
-    actionButton("clean"," Clean",icon = icon("window-close"),
+          actionButton("clean"," Clean",icon = icon("window-close"),
                        style = my_style2))
 
   observeEvent(input$save,{
@@ -128,6 +130,17 @@ Inputs {.sidebar}
   observeEvent(input$clean,{
     my_genes$ensembl <- NULL
   })
+  
+  observeEvent(input$load,{
+    
+    if(file.exists(input$loadfile)){
+      diff_genes = read_tsv(input$loadfile)
+      my_genes$ensembl = pluck(diff_genes,"ensembl")
+    }
+    
+  })
+  
+  
   
 ```
 
