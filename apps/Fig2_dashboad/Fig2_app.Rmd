@@ -15,7 +15,8 @@ list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
                       "rmarkdown","flexdashboard","d3heatmap",
                       "shinythemes","DT","RColorBrewer","extrafontdb")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
-if(length(new.packages)) install.packages(new.packages)
+if(length(new.packages))
+  suppressMessages(install.packages(new.packages,repos = "http://cran.rstudio.com"))
 
 library(tidyverse)
 library(ggrepel)
