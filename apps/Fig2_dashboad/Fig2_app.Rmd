@@ -13,7 +13,7 @@ load("fig2data.RData")
 ## block to check if the packages are installed
 list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
                       "rmarkdown","flexdashboard","d3heatmap",
-                      "shinythemes","DT","RColorBrewer","extrafontdb")
+                      "shinythemes","DT","RColorBrewer","extrafontdb","pheatmap")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages))
   suppressMessages(install.packages(new.packages,repos = "http://cran.rstudio.com"))
@@ -444,7 +444,7 @@ observeEvent(input$ma2_save,{
 
 ```{r model_heatmap}
 
-renderD3heatmap({
+model_mat = reactive({
   
   my_mat = rlogmat1
   
@@ -458,7 +458,11 @@ renderD3heatmap({
           idx = paste(ensembl,gene_id,sep = "_")
         ) %>% 
         pluck("idx")
-      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+      if(length(idx) <= 1){
+        my_mat = my_mat[1:2,]
+      }else{
+        my_mat = my_mat[rownames(my_mat) %in% idx, ]
+      }
     
   }else{
     if(is.null(my_genes$ensembl)){
@@ -483,13 +487,43 @@ renderD3heatmap({
   colnames(my_mat) = colnames(my_mat) %>% 
     str_replace("RNAseq-","")
   
+  my_mat
+
+})
+
+
+fillCol(flex = c(1,.1),
+        renderD3heatmap({
+          my_mat = model_mat()
+          pal = viridis(100)
+          d3heatmap(my_mat,
+                    colors = pal,
+                    xaxis_font_size = 12,
+                    yaxis_font_size = 12)
+          }),
+        fillRow(flex = c(.1,.3,.3,.3),
+                actionButton("model_heat_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("model_heat_width","Model Heatmap width (in)",7),
+          numericInput("model_heat_height","Model Heatmap height (in)",7),
+          textInput("model_heat_file","Model Heatmap file","mh_file.pdf")))
+
+observeEvent(input$model_heat_save,{
+
   pal = viridis(100)
   
-  d3heatmap(my_mat,
-            colors = pal,
-            xaxis_font_size = 12,
-            yaxis_font_size = 12)
+  pheatmap::pheatmap(
+    mat = model_mat(),
+    scale = "row",
+    color = pal,
+    fontsize = input$ts,
+    width = input$model_heat_width,
+    height = input$model_heat_height,
+    filename = input$model_heat_file
+  )
+
 })
+
 
 
 ```
@@ -498,7 +532,7 @@ renderD3heatmap({
 
 ```{r tpm_heatmap}
 
-renderD3heatmap({
+tpm_mat <- reactive({
   
   my_mat = tpmmat1
   
@@ -512,7 +546,13 @@ renderD3heatmap({
           idx = paste(ensembl,gene_id,sep = "_")
         ) %>% 
         pluck("idx")
-      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+
+      if(length(idx) <= 1){
+        my_mat = my_mat[1:2,]
+      }else{
+        my_mat = my_mat[rownames(my_mat) %in% idx, ]
+      }
+
     
   }else{
     if(is.null(my_genes$ensembl)){
@@ -536,15 +576,50 @@ renderD3heatmap({
   
   colnames(my_mat) = colnames(my_mat) %>% 
     str_replace("RNAseq-","")
+
+  my_mat
   
-  pal = viridis(100)
   
-  d3heatmap(my_mat,
-            scale = "row",
-            colors = pal,
-            xaxis_font_size = 12,
-            yaxis_font_size = 12)
 })
+
+
+
+
+fillCol(flex = c(1,.1),
+        renderD3heatmap({
+          
+          my_mat = tpm_mat()  
+          pal = viridis(100)
+  
+          d3heatmap(my_mat,
+                    scale = "row",
+                    colors = pal,
+                    xaxis_font_size = 12,
+                    yaxis_font_size = 12)}),
+        fillRow(flex = c(.1,.3,.3,.3),
+                actionButton("tpm_heat_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("tpm_heat_width","TPM Heatmap width (in)",7),
+          numericInput("tpm_heat_height","TPM Heatmap height (in)",7),
+          textInput("tpm_heat_file","TPM Heatmap file","tpmh_file.pdf")))
+
+observeEvent(input$tpm_heat_save,{
+
+  pal = viridis(100)
+
+  pheatmap::pheatmap(
+    mat = tpm_mat(),
+    color = pal,
+    scale = "row",
+    fontsize = input$ts,
+    width = input$tpm_heat_width,
+    height = input$tpm_heat_height,
+    filename = input$tpm_heat_file
+  )
+
+})
+
+
 
 ```
 
