@@ -14,7 +14,7 @@ load("fig3data.RData")
 list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
                       "rmarkdown","flexdashboard","d3heatmap",
                       "shinythemes","DT","RColorBrewer","hexbin",
-                      "extrafontdb")
+                      "extrafontdb","pheatmap")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages))
   suppressMessages(install.packages(new.packages, repos = "http://cran.rstudio.com"))
@@ -764,7 +764,7 @@ observeEvent(input$ma_noks_save,{
 
 ```{r ebv_heatmap}
 
-renderD3heatmap({
+ebv_mat = reactive({
 
   my_mat = rlogmat
 
@@ -778,7 +778,12 @@ renderD3heatmap({
           idx = paste(ensembl,gene_id,sep = "_")
         ) %>%
         pluck("idx")
-      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+      
+      if(length(idx) <= 1){
+        my_mat = my_mat[1:2,]
+      }else{
+        my_mat = my_mat[rownames(my_mat) %in% idx, ]
+      }
 
   }else{
     if(is.null(ebv_genes$ensembl)){
@@ -802,13 +807,42 @@ renderD3heatmap({
 
   colnames(my_mat) = colnames(my_mat) %>%
     str_replace("RNAseq-","")
+  
+  my_mat
+
+})
+
+fillCol(flex = c(1,.1),
+        renderD3heatmap({
+          
+          my_mat = ebv_mat()
+          pal = viridis(100)
+          
+          d3heatmap(my_mat,
+                    colors = pal,
+                    xaxis_font_size = 12,
+                    yaxis_font_size = 12)}),
+        fillRow(flex = c(.1,.3,.3,.3),
+                actionButton("ebv_heat_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("ebv_heat_width","EBV Heatmap width (in)",7),
+          numericInput("ebv_heat_height","EBV Heatmap height (in)",7),
+          textInput("ebv_heat_file","EBV Heatmap file","ebvh_file.pdf")))
+
+observeEvent(input$ebv_heat_save,{
 
   pal = viridis(100)
+  
+  pheatmap::pheatmap(
+    mat = ebv_mat(),
+    scale = "row",
+    color = pal,
+    fontsize = input$ts,
+    width = input$ebv_heat_width,
+    height = input$ebv_heat_height,
+    filename = input$ebv_heat_file
+  )
 
-  d3heatmap(my_mat,
-            colors = pal,
-            xaxis_font_size = 12,
-            yaxis_font_size = 12)
 })
 
 
@@ -818,8 +852,8 @@ renderD3heatmap({
 
 ```{r noks_heatmap}
 
-renderD3heatmap({
-
+noks_mat = reactive({
+  
   my_mat = rlogmat
 
   if(input$heatmap_type == "most DE"){
@@ -832,7 +866,12 @@ renderD3heatmap({
           idx = paste(ensembl,gene_id,sep = "_")
         ) %>%
         pluck("idx")
-      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+
+      if(length(idx) <= 1){
+        my_mat = my_mat[1:2,]
+      }else{
+        my_mat = my_mat[rownames(my_mat) %in% idx, ]
+      }
 
   }else{
     if(is.null(noks_genes$ensembl)){
@@ -857,13 +896,46 @@ renderD3heatmap({
   colnames(my_mat) = colnames(my_mat) %>%
     str_replace("RNAseq-","")
 
-  pal = viridis(100)
-
-  d3heatmap(my_mat,
-            colors = pal,
-            xaxis_font_size = 12,
-            yaxis_font_size = 12)
+  my_mat
 })
+
+
+
+
+fillCol(flex = c(1,.1),
+        renderD3heatmap({
+          
+          my_mat = noks_mat()
+          pal = viridis(100)
+          
+          d3heatmap(my_mat,
+                    colors = pal,
+                    xaxis_font_size = 12,
+                    yaxis_font_size = 12)}),
+        fillRow(flex = c(.1,.3,.3,.3),
+                actionButton("noks_heat_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("noks_heat_width","NOKS Heatmap width (in)",7),
+          numericInput("noks_heat_height","NOKS Heatmap height (in)",7),
+          textInput("noks_heat_file","NOKS Heatmap file","noks_file.pdf")))
+
+observeEvent(input$noks_heat_save,{
+
+  pal = viridis(100)
+  
+  pheatmap::pheatmap(
+    mat = noks_mat(),
+    scale = "row",
+    color = pal,
+    fontsize = input$ts,
+    width = input$noks_heat_width,
+    height = input$noks_heat_height,
+    filename = input$noks_heat_file
+  )
+
+})
+
+
 
 
 ```
