@@ -1,0 +1,186 @@
+---
+title: "Enrichment analysis with clusterProfiler"
+author: "Rene Welch"
+date: February, 2018
+output:
+  BiocStyle::html_document
+vignette: |
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+
+```{r start,include=FALSE,echo=FALSE,eval=TRUE}
+## loads packages and data
+
+library(org.Hs.eg.db)
+library(tidyverse)
+library(DESeq2)
+library(clusterProfiler)
+library(gridExtra)
+
+knitr::opts_chunk$set(include = FALSE,echo = FALSE,eval = TRUE)
+
+load(here::here("apps/Fig2_dashboad/fig2data.RData"))
+fdr = 0.1
+
+
+```
+
+# Introduction
+
+We are going to perform a pathway analysis, I am using the data from Figure 2, i.e. the genes that were differentially expressed between NOKS and EBV cell lines before any treatment was applied.
+
+```{r data,include=TRUE}
+ls()
+```
+
+Mark already analyzed the data using the TPM matrix and GSEA, so I am going to use `r BiocStyle::Biocpkg("clusterProfiler")` as an alternative method using the data already processed by `r BiocStyle::Biocpkg("DESeq2")`. 
+
+As far as I can tell, the advantages of this package is that:
+
+1. It can perform pathway analysis using the Hallmark gene dataset from **MolSigDB**
+
+2. It contains several visualization methods, including some based on GSEA.
+
+3. This may be minor, but for ChIP-seq annotation we have used `r BiocStyle::Biocpkg("ChIPseeker")` which was created by the same author.
+
+# Pre-analysis
+
+We downloaded the **MolSigDB** curated gene sets from [the GSEA website](http://software.broadinstitute.org/gsea/downloads.jsp), and then we load the hallmark gene set from **MolSigDB**.
+
+```{r hallmark,cache=TRUE,include=TRUE,message=FALSE}
+
+gmt_files = here::here("data/Pathway") %>% 
+  list.files(full.names = TRUE) %>% 
+  set_names(
+    {
+      basename(.) %>% 
+        str_replace(".gmt","") %>% 
+        str_split("\\.") %>% 
+        map_chr( ~ .[length(.)])
+    }
+  )
+
+gmt_files = gmt_files %>% 
+  pluck("entrez") 
+
+hallmark = gmt_files %>% 
+  read.gmt() 
+
+gmt_files
+
+```
+
+Lets recall from previous analysis, that for this dataset there are few differentially expressed genes, therefore we are using $\mbox{FDR} = `r fdr`. We are going to extract three gene sets of the list that we processed with `r BiocStyle::Biocpkg("DESeq2")`:
+
+```{r genes,include=TRUE,echo=TRUE,warning=FALSE,message=FALSE}
+
+diff_genes = diff_genes %>% 
+  separate(gene_id,into = c("ENSEMBL","SYMBOL"), sep = "\\_") %>% 
+  arrange(desc(stat))
+
+ensembl = diff_genes %>% 
+  pull(ENSEMBL) %>% 
+  bitr(fromType = "ENSEMBL",toType = c("SYMBOL","ENTREZID"), OrgDb ="org.Hs.eg.db") %>% 
+  as_tibble()
+
+symbol = diff_genes %>% 
+  pull(SYMBOL) %>% 
+  bitr(fromType = "SYMBOL", toType = c("SYMBOL","ENTREZID"), OrgDb = "org.Hs.eg.db") %>% 
+  as_tibble()
+
+diff_genes = diff_genes %>% 
+  right_join(ensembl,by = c("ENSEMBL","SYMBOL"))
+
+```
+
+
+```{r genes_entrez, include=TRUE,echo=TRUE,warning=FALSE,message=FALSE}
+get_gene_entrez <- function(genes) {
+  
+  pull(genes,stat) %>% 
+    set_names(
+      pull(genes,ENTREZID)
+    )
+  
+}
+
+only_diff_genes = diff_genes  
+
+gene_lists = tribble(
+  ~ list_name, ~ genes_by_symbol,
+  "all", 
+    only_diff_genes %>% 
+    get_gene_entrez(),
+  "upregulated", 
+    only_diff_genes %>%
+    filter(log2FoldChange > 0) %>% 
+    get_gene_entrez(),
+  "downregulated",
+    only_diff_genes %>% 
+    filter(log2FoldChange < 0 ) %>% 
+    get_gene_entrez()
+)
+
+gene_lists
+
+```
+
+## Sanity checks
+
+It seems that only `r only_diff_genes %>% pull(ENTREZID) %>%  {. %in% hallmark$gene} %>% mean() %>% {round(.,4) *100}`% of our genes (labelled by ENTREZID) are in the hallmark dataset. Therefore, I need to check if the genome versions agree.
+
+* First, do every gene SYMBOL has a ENSEMBL counterpart?
+
+```{r symbol_ensembl_agree}
+
+
+
+
+
+
+```
+
+
+
+# Enrichment analysis
+
+
+```{r}
+
+##Note: I tried to use both the `enricher` and `GSEA` methods to perform pathway analysis using gene `SYMBOL`s. However, I wasn't able to use any of them. Probably due to the fact that only `r gene_lists$genes_by_symbol[[1]] %>% names %in% hallmark[[2]][,2] %>% mean %>% round(4)*100`% of the symbol names are in the hallmark gene set.
+
+gene_lists$genes_by_symbol[[1]] %>% 
+  enricher(TERM2GENE = hallmark)
+
+## data(geneList, package="DOSE")
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Bibliography
+
+G Yu, LG Wang, Y Han, QY He. clusterProfiler: an R package for comparing biological themes among gene clusters. OMICS: A Journal of Integrative Biology 2012, 16(5):284-287. doi:[10.1089/omi.2011.0118](http://dx.doi.org/10.1089/omi.2011.0118)
+
