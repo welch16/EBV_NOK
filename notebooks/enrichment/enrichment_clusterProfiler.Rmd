@@ -130,6 +130,10 @@ diff_genes %>%
 
 ```
 
+
+
+
+
 # Pathway analysis
 
 This package appears to be contains several methods:
@@ -152,7 +156,9 @@ pathway = diff_genes %>%
                         GSEA,
                         TERM2GENE = pluck(hallmark,"symbols")),
     enricher_analysis = map(gene_list,names) %>% 
-      map(enricher,TERM2GENE = pluck(hallmark,"symbols")))
+      map(enricher,TERM2GENE = pluck(hallmark,"symbols")),
+    gsea_dotplots = map(gsea_analysis,dotplot),
+    enricher_dotplots = map(enricher_analysis,dotplot))
 
 ```
 
@@ -168,10 +174,8 @@ pathway = diff_genes %>%
 pathway %>% 
   filter(cell == "NOKS") %>% 
   filter(type == "all") %>% 
-  pull(gsea_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("All")
+  pull(gsea_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -182,10 +186,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "EBV") %>% 
   filter(type == "all") %>% 
-  pull(gsea_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("All")
+  pull(gsea_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -198,10 +200,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "NOKS") %>% 
   filter(type == "upreg") %>% 
-  pull(gsea_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Upregulated")
+  pull(gsea_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -212,10 +212,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "EBV") %>% 
   filter(type == "upreg") %>% 
-  pull(gsea_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Upregulated")
+  pull(gsea_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -228,10 +226,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "NOKS") %>% 
   filter(type == "downreg") %>% 
-  pull(gsea_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Downregulated")
+  pull(gsea_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -241,11 +237,9 @@ pathway %>%
 
 pathway %>% 
   filter(cell == "EBV") %>% 
-  filter(type == "all") %>% 
-  pull(gsea_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Downregulated")
+  filter(type == "downreg") %>% 
+  pull(gsea_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -261,10 +255,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "NOKS") %>% 
   filter(type == "all") %>% 
-  pull(enricher_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("All")
+  pull(enricher_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -275,10 +267,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "EBV") %>% 
   filter(type == "all") %>% 
-  pull(enricher_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("All")
+  pull(enricher_dotplots) %>% 
+  pluck(1)
 
 ```
 
@@ -291,10 +281,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "NOKS") %>% 
   filter(type == "upreg") %>% 
-  pull(enricher_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Upregulated")
+  pull(enricher_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -305,10 +293,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "EBV") %>% 
   filter(type == "upreg") %>% 
-  pull(enricher_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Upregulated")
+  pull(enricher_dotplots) %>% 
+  pluck(1) 
 
 ```
 
@@ -321,11 +307,8 @@ pathway %>%
 pathway %>% 
   filter(cell == "NOKS") %>% 
   filter(type == "downreg") %>% 
-  pull(enricher_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Downregulated")
-
+  pull(enricher_dotplots) %>% 
+  pluck(1)
 ```
 
 - EBV
@@ -335,16 +318,112 @@ pathway %>%
 pathway %>% 
   filter(cell == "EBV") %>% 
   filter(type == "downreg") %>% 
-  pull(enricher_analysis) %>% 
-  pluck(1) %>% 
-  dotplot()+
-  ggtitle("Downregulated")
+  pull(enricher_dotplots) %>% 
+  pluck(1) 
+
+```
+
+## Comparison between EBV and NOKS
+
+```{r over_rep}
+
+comparison = pathway %>% 
+  select(cell,type,gene_list) %>% 
+  group_by(type) %>% 
+  summarize(
+    score_lists = list(gene_list)) %>% 
+  ungroup() %>% 
+  mutate(
+    score_lists = map(score_lists,set_names,c("EBV","NOKS")),
+    gene_lists = map(score_lists, ~ map(.,names))
+  ) %>% 
+  mutate(
+    enricher_comp = map(gene_lists,compareCluster, fun = "enricher",
+                            TERM2GENE = pluck(hallmark,"symbols")),
+    enricher_dotplot = map(enricher_comp,dotplot)
+  )
+
+
+```
+
+### All
+
+```{r,fig.width=9,fig.height=5,include=TRUE}
+
+comparison %>% 
+  filter(type == "all") %>% 
+  pull(enricher_dotplot) %>% 
+  pluck(1)
+
+```
+
+### Upregulated
+
+```{r,fig.width=9,fig.height=5,include=TRUE}
+
+comparison %>% 
+  filter(type == "upreg") %>% 
+  pull(enricher_dotplot) %>% 
+  pluck(1)
 
 ```
 
 
+### Downregulated
 
+```{r,fig.width=9,fig.height=5,include=TRUE}
 
+comparison %>% 
+  filter(type == "downreg") %>% 
+  pull(enricher_dotplot) %>% 
+  pluck(1)
+
+```
+
+## Comparison between upregulated and downregulated genes
+
+```{r comp2}
+
+comparison2 = pathway %>% 
+  select(cell,type,gene_list) %>% 
+  filter(type != "all") %>% 
+  group_by(cell) %>% 
+  summarize(
+    score_lists = list(gene_list)) %>% 
+  ungroup() %>% 
+  mutate(
+    score_lists = map(score_lists,set_names,c("Upregulated","Downregulated")),
+    gene_lists = map(score_lists, ~ map(.,names))
+  ) %>% 
+  mutate(
+    enricher_comp = map(gene_lists,compareCluster, fun = "enricher",
+                            TERM2GENE = pluck(hallmark,"symbols")),
+    enricher_dotplot = map(enricher_comp,dotplot)
+  )
+
+```
+
+### EBV
+
+```{r,fig.width=9,fig.height=5,include=TRUE}
+
+comparison2 %>% 
+  filter(cell == "EBV") %>% 
+  pull(enricher_dotplot) %>% 
+  pluck(1)
+
+```
+
+### NOKS
+
+```{r,fig.width=9,fig.height=5,include=TRUE}
+
+comparison2 %>% 
+  filter(cell == "NOKS") %>% 
+  pull(enricher_dotplot) %>% 
+  pluck(1)
+
+```
 
 
 
