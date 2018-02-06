@@ -20,17 +20,17 @@ library(DESeq2)
 library(clusterProfiler)
 library(gridExtra)
 
+fdr = 5e-2
+
 knitr::opts_chunk$set(include = FALSE,echo = FALSE,eval = TRUE)
 
-load(here::here("apps/Fig2_dashboad/fig2data.RData"))
-fdr = 0.1
-
+load(here::here("apps/Fig3_dashboad/fig3data.RData"))
 
 ```
 
 # Introduction
 
-We are going to perform a pathway analysis, I am using the data from Figure 2, i.e. the genes that were differentially expressed between NOKS and EBV cell lines before any treatment was applied.
+We are going to perform a pathway analysis, I am using the data from Figure 3, i.e. genes that were differentiallly expressed in specific EBV or NOKS cell lines after applying the MC  treatment:
 
 ```{r data,include=TRUE}
 ls()
@@ -40,20 +40,25 @@ Mark already analyzed the data using the TPM matrix and GSEA, so I am going to u
 
 As far as I can tell, the advantages of this package is that:
 
-1. It can perform pathway analysis using the Hallmark gene dataset from **MolSigDB**
+1. It can perform pathway analysis using the Hallmark gene data set from **MolSigDB**
 
 2. It contains several visualization methods, including some based on GSEA.
 
 3. This may be minor, but for ChIP-seq annotation we have used `r BiocStyle::Biocpkg("ChIPseeker")` which was created by the same author.
 
-# Pre-analysis
+# Preparing the data
 
-We downloaded the **MolSigDB** curated gene sets from [the GSEA website](http://software.broadinstitute.org/gsea/downloads.jsp), and then we load the hallmark gene set from **MolSigDB**.
+## Hallmark gene list V5.1
 
-```{r hallmark,cache=TRUE,include=TRUE,message=FALSE}
+We downloaded the **MolSigDB** curated gene sets from [the GSEA website](http://software.broadinstitute.org/gsea/downloads.jsp), and then we load the hallmark gene set from **MolSigDB**, using the 5.1 version:
+
+```{r hallmark,cache=TRUE,include=TRUE,message=FALSE,warning=FALSE}
 
 gmt_files = here::here("data/Pathway") %>% 
-  list.files(full.names = TRUE) %>% 
+  list.files(full.names = TRUE,recursive = TRUE) %>% 
+  str_subset("v5.1") %>% 
+  str_subset(".gmt") %>% 
+  str_subset("h.all") %>% 
   set_names(
     {
       basename(.) %>% 
@@ -67,85 +72,275 @@ gmt_files = here::here("data/Pathway") %>%
 hallmark = gmt_files %>% 
   map(read.gmt)
 
-gmt_files
+gmt_files %>% 
+  basename()
 
 ```
 
-Lets recall from previous analysis, that for this dataset there are few differentially expressed genes, therefore we are using $\mbox{FDR} = `r fdr`. We are going to extract three gene sets of the list that we processed with `r BiocStyle::Biocpkg("DESeq2")`:
+## Diff expressed genes
 
-```{r genes,include=TRUE,echo=TRUE,warning=FALSE,message=FALSE}
+We define a gene to be diff. expressed if the adjusted p.value is $\leq `r fdr`$
 
-diff_genes = diff_genes %>% 
-  separate(gene_id,into = c("ENSEMBL","SYMBOL"), sep = "\\_") %>% 
-  arrange(desc(stat))
+```{r,include=TRUE,echo=FALSE,eval=TRUE,warning=FALSE,fig.width=9,fig.height=5}
 
-ensembl = diff_genes %>% 
-  pull(ENSEMBL) %>% 
-  bitr(fromType = "ENSEMBL",toType = c("SYMBOL","ENTREZID"), OrgDb ="org.Hs.eg.db") %>% 
-  as_tibble()
-
-diff_genes = diff_genes %>% 
-  right_join(ensembl,by = c("ENSEMBL","SYMBOL")) %>% 
-  unique()
-
-```
-
-## Sanity checks
-
-```{r fuzzy_symbol}
-
-library(fuzzyjoin)
-
-our_symbol = diff_genes %>% 
-  select(SYMBOL) %>% 
-  unique() %>% 
-  rename(gene = SYMBOL)
-
-hallmark_symbols = hallmark %>% 
-  pluck("symbols") %>% 
-  as_tibble() %>% 
-  select(gene) %>% 
-  unique() 
-
-joined = our_symbol %>% 
-  stringdist_inner_join(hallmark_symbols,by = "gene",max_dist = .3)
-
-anti_j = our_symbol %>% 
-  stringdist_anti_join(hallmark_symbols,by = "gene",max_dist  = .5)
-
-
-```
+diff_genes = tribble(
+  ~ cell  , ~ results,
+  "EBV",diff_genes_EBV,
+  "NOKS",diff_genes_NOKS
+) %>% 
+  mutate(
+    results = map(results,separate,gene_id,into = c("ENSEMBL","SYMBOL"),sep = "\\_"),
+    diff_gene_list = map(results,filter,padj <= fdr) %>% 
+      map(arrange,desc(stat)) %>% 
+      map( ~ {
+        mydata = .x
+        pull(mydata,stat) %>% 
+          set_names(pull(mydata,SYMBOL))
+        }),
+    upreg_gene_list = map(results,filter,padj <= fdr) %>% 
+      map(filter,log2FoldChange > 0) %>% 
+      map(arrange, desc(stat)) %>% 
+      map(~ {
+        mydata = .x
+        pull(mydata,stat) %>% 
+          set_names(pull(mydata,SYMBOL))
+      }),
+    downreg_gene_list = map(results,filter,padj <= fdr) %>% 
+      map(filter,log2FoldChange < 0) %>% 
+      map(arrange, desc(stat)) %>% 
+      map(~ {
+        mydata = .x
+        pull(mydata,stat) %>% 
+          set_names(pull(mydata,SYMBOL))
+      })
+  )
 
 
 
-# Enrichment analysis
-
-
-```{r}
-
-##Note: I tried to use both the `enricher` and `GSEA` methods to perform pathway analysis using gene `SYMBOL`s. However, I wasn't able to use any of them. Probably due to the fact that only `r gene_lists$genes_by_symbol[[1]] %>% names %in% hallmark[[2]][,2] %>% mean %>% round(4)*100`% of the symbol names are in the hallmark gene set.
-
-gene_lists$genes_by_symbol[[1]] %>% 
-  enricher(TERM2GENE = hallmark)
-
-## data(geneList, package="DOSE")
-
-
-
+diff_genes %>% 
+  select(cell,results) %>% 
+  unnest() %>% 
+  ggplot(aes(-log10(padj)))+
+  geom_histogram(bins = 100,fill = "white",colour = "black")+
+  facet_grid( cell ~ . )+
+  scale_x_continuous(limits = c(0,30))+
+  geom_vline(xintercept = -log10(fdr),colour = "red",linetype =2)+
+  theme_bw()
 
 
 ```
 
+# Pathway analysis
+
+This package appears to be contains several methods:
+
+- An R made version of GSEA, we are using the GSEA model for a lists of genes with a signal-to-noise measure for each diff. expressed gene (which in this case is calculated by `r BiocStyle::Biocpkg("DESeq2")`.
+
+- An over-representation test, which is a hyper-geometric test of the gene lists vs the genes in a certain pathway.
+
+```{r path_analysis,message=FALSE,warning=FALSE}
+
+pathway = diff_genes %>% 
+  select(-results) %>% 
+  gather(type,gene_list,-cell) %>% 
+  mutate(
+    type = str_replace(type,"_gene_list",""),
+    type = if_else(type == "diff","all",type)
+  ) %>% 
+  mutate(
+    gsea_analysis = map(gene_list,
+                        GSEA,
+                        TERM2GENE = pluck(hallmark,"symbols")),
+    enricher_analysis = map(gene_list,names) %>% 
+      map(enricher,TERM2GENE = pluck(hallmark,"symbols")))
+
+```
 
 
+## GSEA analysis
+
+### Diff. expressed genes
+
+- NOKS
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "NOKS") %>% 
+  filter(type == "all") %>% 
+  pull(gsea_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("All")
+
+```
+
+- EBV
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "EBV") %>% 
+  filter(type == "all") %>% 
+  pull(gsea_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("All")
+
+```
+
+### Upregulated genes
+
+- NOKS
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "NOKS") %>% 
+  filter(type == "upreg") %>% 
+  pull(gsea_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Upregulated")
+
+```
+
+- EBV
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "EBV") %>% 
+  filter(type == "upreg") %>% 
+  pull(gsea_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Upregulated")
+
+```
+
+### Downregulated genes
+
+- NOKS
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "NOKS") %>% 
+  filter(type == "downreg") %>% 
+  pull(gsea_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Downregulated")
+
+```
+
+- EBV
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "EBV") %>% 
+  filter(type == "all") %>% 
+  pull(gsea_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Downregulated")
+
+```
 
 
+## Over-representation test
 
+### Diff. expressed genes
 
+- NOKS
 
+```{r,include=TRUE,fig.width=9,fig.height=4}
 
+pathway %>% 
+  filter(cell == "NOKS") %>% 
+  filter(type == "all") %>% 
+  pull(enricher_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("All")
 
+```
 
+- EBV
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "EBV") %>% 
+  filter(type == "all") %>% 
+  pull(enricher_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("All")
+
+```
+
+### Upregulated genes
+
+- NOKS
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "NOKS") %>% 
+  filter(type == "upreg") %>% 
+  pull(enricher_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Upregulated")
+
+```
+
+- EBV
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "EBV") %>% 
+  filter(type == "upreg") %>% 
+  pull(enricher_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Upregulated")
+
+```
+
+### Downregulated genes
+
+- NOKS
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "NOKS") %>% 
+  filter(type == "downreg") %>% 
+  pull(enricher_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Downregulated")
+
+```
+
+- EBV
+
+```{r,include=TRUE,fig.width=9,fig.height=4}
+
+pathway %>% 
+  filter(cell == "EBV") %>% 
+  filter(type == "downreg") %>% 
+  pull(enricher_analysis) %>% 
+  pluck(1) %>% 
+  dotplot()+
+  ggtitle("Downregulated")
+
+```
 
 
 
