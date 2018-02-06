@@ -594,16 +594,21 @@ $(document).ready(function () {
 <p>We downloaded the <strong>MolSigDB</strong> curated gene sets from <a href="http://software.broadinstitute.org/gsea/downloads.jsp">the GSEA website</a>, and then we load the hallmark gene set from <strong>MolSigDB</strong>.</p>
 <pre><code>## [1] &quot;/Users/renewelch/Documents/EBV_NOK/data/Pathway/h.all.v6.1.entrez.gmt&quot;</code></pre>
 <p>Lets recall from previous analysis, that for this dataset there are few differentially expressed genes, therefore we are using $ = 0.1. We are going to extract three gene sets of the list that we processed with <em><a href="http://bioconductor.org/packages/DESeq2">DESeq2</a></em>:</p>
-<pre class="r"><code>only_diff_genes = diff_genes %&gt;% 
+<pre class="r"><code>diff_genes = diff_genes %&gt;% 
   separate(gene_id,into = c(&quot;ENSEMBL&quot;,&quot;SYMBOL&quot;), sep = &quot;\\_&quot;) %&gt;% 
   arrange(desc(stat))
 
-ensembl = only_diff_genes %&gt;% 
+ensembl = diff_genes %&gt;% 
   pull(ENSEMBL) %&gt;% 
   bitr(fromType = &quot;ENSEMBL&quot;,toType = c(&quot;SYMBOL&quot;,&quot;ENTREZID&quot;), OrgDb =&quot;org.Hs.eg.db&quot;) %&gt;% 
   as_tibble()
 
-only_diff_genes = only_diff_genes %&gt;% 
+symbol = diff_genes %&gt;% 
+  pull(SYMBOL) %&gt;% 
+  bitr(fromType = &quot;SYMBOL&quot;, toType = c(&quot;SYMBOL&quot;,&quot;ENTREZID&quot;), OrgDb = &quot;org.Hs.eg.db&quot;) %&gt;% 
+  as_tibble()
+
+diff_genes = diff_genes %&gt;% 
   right_join(ensembl,by = c(&quot;ENSEMBL&quot;,&quot;SYMBOL&quot;))</code></pre>
 <pre class="r"><code>get_gene_entrez &lt;- function(genes) {
   
@@ -613,7 +618,9 @@ only_diff_genes = only_diff_genes %&gt;%
     )
   
 }
-  
+
+only_diff_genes = diff_genes  
+
 gene_lists = tribble(
   ~ list_name, ~ genes_by_symbol,
   &quot;all&quot;, 
@@ -638,7 +645,7 @@ gene_lists</code></pre>
 ## 3 downregulated &lt;dbl [6,537]&gt;</code></pre>
 <section id="sanity-checks" class="level2">
 <h2><span class="header-section-number">2.1</span> Sanity checks</h2>
-<p>It seems that only 25.29 of our genes (labelled by ENTREZID) are in the hallmark dataset. Therefore, I need to check if the genome versions agree.</p>
+<p>It seems that only 25.29% of our genes (labelled by ENTREZID) are in the hallmark dataset. Therefore, I need to check if the genome versions agree.</p>
 <ul>
 <li>First, do every gene SYMBOL has a ENSEMBL counterpart?</li>
 </ul>

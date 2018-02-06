@@ -63,11 +63,9 @@ gmt_files = here::here("data/Pathway") %>%
     }
   )
 
-gmt_files = gmt_files %>% 
-  pluck("entrez") 
 
 hallmark = gmt_files %>% 
-  read.gmt() 
+  map(read.gmt)
 
 gmt_files
 
@@ -86,59 +84,34 @@ ensembl = diff_genes %>%
   bitr(fromType = "ENSEMBL",toType = c("SYMBOL","ENTREZID"), OrgDb ="org.Hs.eg.db") %>% 
   as_tibble()
 
-symbol = diff_genes %>% 
-  pull(SYMBOL) %>% 
-  bitr(fromType = "SYMBOL", toType = c("SYMBOL","ENTREZID"), OrgDb = "org.Hs.eg.db") %>% 
-  as_tibble()
-
 diff_genes = diff_genes %>% 
-  right_join(ensembl,by = c("ENSEMBL","SYMBOL"))
-
-```
-
-
-```{r genes_entrez, include=TRUE,echo=TRUE,warning=FALSE,message=FALSE}
-get_gene_entrez <- function(genes) {
-  
-  pull(genes,stat) %>% 
-    set_names(
-      pull(genes,ENTREZID)
-    )
-  
-}
-
-only_diff_genes = diff_genes  
-
-gene_lists = tribble(
-  ~ list_name, ~ genes_by_symbol,
-  "all", 
-    only_diff_genes %>% 
-    get_gene_entrez(),
-  "upregulated", 
-    only_diff_genes %>%
-    filter(log2FoldChange > 0) %>% 
-    get_gene_entrez(),
-  "downregulated",
-    only_diff_genes %>% 
-    filter(log2FoldChange < 0 ) %>% 
-    get_gene_entrez()
-)
-
-gene_lists
+  right_join(ensembl,by = c("ENSEMBL","SYMBOL")) %>% 
+  unique()
 
 ```
 
 ## Sanity checks
 
-It seems that only `r only_diff_genes %>% pull(ENTREZID) %>%  {. %in% hallmark$gene} %>% mean() %>% {round(.,4) *100}`% of our genes (labelled by ENTREZID) are in the hallmark dataset. Therefore, I need to check if the genome versions agree.
+```{r fuzzy_symbol}
 
-* First, do every gene SYMBOL has a ENSEMBL counterpart?
+library(fuzzyjoin)
 
-```{r symbol_ensembl_agree}
+our_symbol = diff_genes %>% 
+  select(SYMBOL) %>% 
+  unique() %>% 
+  rename(gene = SYMBOL)
 
+hallmark_symbols = hallmark %>% 
+  pluck("symbols") %>% 
+  as_tibble() %>% 
+  select(gene) %>% 
+  unique() 
 
+joined = our_symbol %>% 
+  stringdist_inner_join(hallmark_symbols,by = "gene",max_dist = .3)
 
-
+anti_j = our_symbol %>% 
+  stringdist_anti_join(hallmark_symbols,by = "gene",max_dist  = .5)
 
 
 ```
