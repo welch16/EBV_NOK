@@ -96,7 +96,7 @@ onto_keratinocyte[["bp"]]
 
 We define a gene to be diff. expressed if the adjusted p.value is $\leq `r fdr`$
 
-```{r,include=TRUE,echo=FALSE,eval=TRUE,warning=FALSE,fig.width=9,fig.height=5}
+```{r,include=TRUE,echo=FALSE,eval=TRUE,warning=FALSE,fig.width=7,fig.height=5,fig.align="center"}
 
 diff_genes = tribble(
   ~ cell  , ~ results,
@@ -149,6 +149,7 @@ diff_genes %>%
 
 ```{r path_analysis,message=FALSE,warning=FALSE,cache=TRUE}
 
+set.seed(12345)
 pathway = diff_genes %>% 
   select(-results) %>% 
   gather(type,gene_list,-cell) %>% 
@@ -179,10 +180,26 @@ extract_results = function(x){
         log10pval = -log10(pvalue),
         log10padj = -log10(p.adjust))}
 
+separate_ratio = function(enricher_results)
+{
+  enricher_results %>% 
+    separate(GeneRatio, into = c("num","den"),sep = "/", remove = FALSE) %>% 
+    mutate(
+      den = as.numeric(den),
+      num = as.numeric(num),
+      GeneRatio_num = num /den
+    ) %>% 
+    select(-num,-den)
+    
+}
+
+
 results = pathway %>% 
   select(-gene_list) %>% 
   mutate_if(negate(is.character),
-            funs(extract_results(.)))
+            funs(extract_results(.))) %>% 
+    mutate_at(vars(contains("enricher")),
+            funs(map(.,separate_ratio)))
   
 ```
 
@@ -193,29 +210,43 @@ For both methods `GSEA` and `enricher`, we performed the pathway analysis using 
 ```{r summary,include=TRUE,echo=FALSE}
 
 results %>% 
-  mutate_if(is.list,funs( map_int(.,nrow) ))
+  mutate_if(is.list,funs( map_int(.,nrow) )) %>% 
+  select(-contains("enricher"))
 
 ```
 
 
 ```{r plot_funs}
 
-barplot_NES = function(result, top_NES = 20, color_by = "p.adjust",
-                       label_by = "setSize")
+gsea_barplot_NES = function(result, top_NES = 20, color_by = "p.adjust",
+                       label_by = "setSize",type = "upreg")
 {
   
-  pal = viridis::viridis(1000) %>% 
-    rev()
+  pal = viridis::viridis(1000)
   
   bb = result %>% 
     pull(NES) %>% 
     max()
   
+  if(type == "upreg"){
+    result = result %>% 
+      top_n(n = top_NES,wt = NES) %>% 
+      arrange(NES) %>% 
+      mutate(
+        label_x = NES + 0.3
+      )
+  }else{
+    result = result %>% 
+      top_n(n = -top_NES,wt = NES) %>% 
+      arrange(desc(NES)) %>% 
+      mutate(
+        label_x = NES - 0.3
+      )
+  }
   result %>% 
-  top_n(n = top_NES,wt = NES) %>% 
-    arrange(NES) %>% 
-    mutate(ID = factor(ID,levels = ID),
-           label_x = NES + 0.3) %>% 
+    mutate(ID = as.character(ID) %>% 
+             str_sub(end = 40),
+           ID = factor(ID,levels = ID)) %>% 
     ggplot(aes_string("ID","NES",fill = color_by))+
     geom_bar(stat = "identity")+
     geom_text(aes_string("ID","label_x",label = label_by))+
@@ -223,20 +254,179 @@ barplot_NES = function(result, top_NES = 20, color_by = "p.adjust",
     scale_fill_gradientn(colors = pal)+
     theme(
       axis.title.y = element_blank()
+    )  
+}
+
+
+enricher_barplot_geneRatio = function(result, top_GR = 20, color_by = "p.adjust",
+                       label_by = "Count")
+{
+  
+  pal = viridis::viridis(1000)
+  
+    bb = result %>% 
+    pull(GeneRatio_num) %>% 
+    max()
+  
+  result %>% 
+  top_n(n = top_GR,wt = GeneRatio_num) %>% 
+    arrange(GeneRatio_num) %>% 
+    mutate(ID = factor(ID,levels = ID),
+           label_x = GeneRatio_num + 0.015) %>% 
+    ggplot(aes_string("ID","GeneRatio_num",fill = color_by))+
+    geom_bar(stat = "identity")+
+    geom_text(aes_string("ID","label_x",label = label_by))+
+    coord_flip()+
+    scale_fill_gradientn(colors = pal)+
+    theme(
+      axis.title.y = element_blank()
     )+
-    ylim(0, bb + .5)
+    ylab("Gene ratio")
     
 }
 
-```
-
-```{r}
-results %>% 
-  pluck("gsea_0.05") %>% 
-  pluck(4) %>% 
-  barplot_NES(top_NES = 20, color_by = "log10padj",label_by = "setSize")
 
 ```
+
+## GSEA analysis with pval_threshold = 0.1
+
+__Quick note__: In the figures below, I truncated the gene sets names at 40 character to get better visualizations.
+
+### All genes
+
+```{r ebv_vs_noks_all,include=TRUE,fig.width=9,fig.height=5}
+
+plots_0.1 = results %>% 
+  filter(type == "all") %>% 
+  pluck("gsea_0.1") %>% 
+  map(gsea_barplot_NES,15,"log10padj",type = "upreg")
+
+
+  plots_0.1[[1]] + ggtitle("EBV")
+  
+  plots_0.1[[2]] + ggtitle("NOKS")
+```
+
+### Upregulated
+
+```{r ebv_vs_noks_upr,include=TRUE,fig.width=9,fig.height=5}
+
+plots_0.1 = results %>% 
+  filter(type == "upreg") %>% 
+  pluck("gsea_0.1") %>% 
+  map(gsea_barplot_NES,15,"log10padj",type ="upreg")
+
+
+  plots_0.1[[1]] + ggtitle("EBV")
+  
+  plots_0.1[[2]] + ggtitle("NOKS")
+```
+
+### Downregulated
+
+
+```{r ebv_vs_noks_dr,include=TRUE,fig.width=9,fig.height=5}
+
+plots_0.1 = results %>% 
+  filter(type == "downreg") %>% 
+  pluck("gsea_0.1") %>% 
+  map(gsea_barplot_NES,15,"log10padj",type = "downreg")
+
+
+  plots_0.1[[1]] + ggtitle("EBV")
+  
+  plots_0.1[[2]] + ggtitle("NOKS")
+```
+
+## Extra analysis: Seached `kera` in MolSigDB
+
+I constructed a gene list by searching in the GSEA website all the gene sets related to KERANOCYTES. We repeated the previous GSEA analysis:
+
+```{r kera_genes, include=FALSE}
+
+kera_genes = here::here("data/Pathway") %>% 
+  list.files(full.names = TRUE,recursive = TRUE) %>% 
+  str_subset("kera") %>% 
+  read.gmt() ## had to add a new line to read
+
+```
+
+```{r kera_pathway,cache=TRUE,include=FALSE}
+
+set.seed(12345)
+kera_pathway = diff_genes %>% 
+  select(-results) %>% 
+  gather(type,gene_list,-cell) %>% 
+  mutate(
+    type = str_replace(type,"_gene_list",""),
+    type = if_else(type == "diff","all",type)
+  ) %>% 
+  mutate(
+    gsea_0.05 = map(gene_list,
+                        GSEA,
+                        TERM2GENE = kera_genes,
+                        pvalueCutoff = 0.05),
+    gsea_0.1 = map(gene_list,
+                         GSEA,
+                         TERM2GENE = kera_genes,
+                         pvalueCutoff = 0.1))
+
+kera_results = kera_pathway %>% 
+  select(-gene_list) %>% 
+  mutate_if(negate(is.character),
+            funs(extract_results(.)))
+
+```
+
+```{r kera_summary,include=TRUE,echo=FALSE}
+
+kera_results %>% 
+  mutate_if(is.list,funs( map_int(.,nrow) )) %>% 
+  select(-contains("enricher"))
+
+```
+
+### All genes
+
+```{r kera_ebv_vs_noks_all,include=TRUE,fig.width=9,fig.height=5}
+
+plots_0.1 = kera_results %>% 
+  filter(type == "all") %>% 
+  pluck("gsea_0.1") %>% 
+  map(gsea_barplot_NES,10,"log10padj",type = "upreg")
+
+  plots_0.1[[1]] + ggtitle("EBV")
+  
+  plots_0.1[[2]] + ggtitle("NOKS")
+```
+
+### Upregulated
+
+```{r kera_ebv_vs_noks_upreg,include=TRUE,fig.width=9,fig.height=5}
+
+plots_0.1 = kera_results %>% 
+  filter(type == "upreg") %>% 
+  pluck("gsea_0.1") %>% 
+  map(gsea_barplot_NES,10,"log10padj",type = "upreg")
+
+  plots_0.1[[1]] + ggtitle("EBV")
+  
+  plots_0.1[[2]] + ggtitle("NOKS")
+```
+
+### Downregulated
+
+__Note__: Only the following, which can change due to the permuation:
+
+```{r downreg_kera,include=TRUE,echo=TRUE}
+
+kera_results %>% 
+  filter(type == "downreg") %>% 
+  pluck("gsea_0.1") 
+
+
+```
+
 
 
 
