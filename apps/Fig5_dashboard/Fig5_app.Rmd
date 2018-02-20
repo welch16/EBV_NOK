@@ -594,23 +594,27 @@ observeEvent(input$ma_save,{
 
 ```
 
-<!---
+
 ### Heatmap
 
 ```{r heatmap}
 
-ebv_mat = reactive({
+mat = reactive({
 
   my_mat = rlogmat
+  my_genes = diff_genes %>% 
+    filter(cell == input$cell_mat) %>% 
+    select(results) %>% 
+    unnest()
 
   if(input$heatmap_type == "most DE"){
-    genes = EBV_genes %>%
+    genes = my_genes %>%
       arrange(desc(log10pval)) %>%
       head(input$heatmap_most )
 
       idx = genes %>%
         mutate(
-          idx = paste(ensembl,gene_id,sep = "_")
+          idx = paste(ensembl_id,gene_id,sep = "_")
         ) %>%
         pluck("idx")
       
@@ -621,15 +625,25 @@ ebv_mat = reactive({
       }
 
   }else{
-    if(is.null(ebv_genes$ensembl)){
+    
+    if(input$cell_mat == "EBV"){
+      ensembl = ebv_genes$ensembl
+    }else if(input$cell_mat == "NOKS"){
+      ensembl = noks_genes$ensembl
+    }else{
+      ensembl = drdz_genes$ensembl
+    }
+    
+    
+    if(is.null(ensembl)){
       my_mat = my_mat[sample(nrow(my_mat),3),]
     }else{
-      genes = EBV_genes %>%
-        filter(ensembl %in% ebv_genes$ensembl)
+      genes = my_genes %>%
+        filter(ensembl_id %in% ensembl)
 
       idx = genes %>%
         mutate(
-          idx = paste(ensembl,gene_id,sep = "_")
+          idx = paste(ensembl_id,gene_id,sep = "_")
         ) %>%
         pluck("idx")
       my_mat = my_mat[rownames(my_mat) %in% idx, ]
@@ -647,10 +661,13 @@ ebv_mat = reactive({
 
 })
 
-fillCol(flex = c(1,.1),
+fillCol(flex = c(.1,.8,.1),
+        fillRow(column(6,selectInput("cell_mat","Cell",
+                                     choices = pull(diff_genes,cell),
+                                     selected = "EBV"))),
         renderD3heatmap({
           
-          my_mat = ebv_mat()
+          my_mat = mat()
           pal = viridis(100)
           
           d3heatmap(my_mat,
@@ -658,24 +675,24 @@ fillCol(flex = c(1,.1),
                     xaxis_font_size = 12,
                     yaxis_font_size = 12)}),
         fillRow(flex = c(.1,.3,.3,.3),
-                actionButton("ebv_heat_save","",icon = icon("camera"),
+                actionButton("heat_save","",icon = icon("camera"),
                        style = my_style),
-          numericInput("ebv_heat_width","EBV Heatmap width (in)",7),
-          numericInput("ebv_heat_height","EBV Heatmap height (in)",7),
-          textInput("ebv_heat_file","EBV Heatmap file","ebvh_file.pdf")))
+          numericInput("heat_width","Heatmap width (in)",7),
+          numericInput("heat_height","Heatmap height (in)",7),
+          textInput("heat_file","Heatmap file","hm_file.pdf")))
 
-observeEvent(input$ebv_heat_save,{
+observeEvent(input$heat_save,{
 
   pal = viridis(100)
   
   pheatmap::pheatmap(
-    mat = ebv_mat(),
+    mat = mat(),
     scale = "row",
     color = pal,
     fontsize = input$ts,
-    width = input$ebv_heat_width,
-    height = input$ebv_heat_height,
-    filename = input$ebv_heat_file
+    width = input$heat_width,
+    height = input$heat_height,
+    filename = input$heat_file
   )
 
 })
@@ -684,38 +701,53 @@ observeEvent(input$ebv_heat_save,{
 ```
 
 
-<!---
-### EBV genes 
+### Genes 
 
-```{r ebv_genes}  
+```{r genes}  
 
-div(
-  renderDataTable(
-    EBV_genes %>%
-      filter(ensembl %in% ebv_genes$ensembl) %>%
-      select(gene_id,ensembl,padj,log10pval,MC,none,stat),
-    options = list(
-      pageLength = 10,
-      lengthMenu = c(10,20,50,100)
-    ) ) ,style = "font-size:80%")
+#div(
+  
+  
+  fillCol(flex = c(.9,.1),
+          fillRow(renderDataTable({
+            
+            if(input$cell_genes == "EBV"){
+              ensembl = ebv_genes$ensembl
+            }else if(input$cell_genes == "NOKS"){
+              ensembl = noks_genes$ensembl
+            }else{
+              ensembl = drdz_genes$ensembl
+              
+            }
+            
+            diff_genes %>% 
+              filter(cell == input$cell_genes) %>% 
+              select(results) %>% 
+              unnest() %>%
+              inner_join(MA_TPM %>% 
+                           filter(cell == input$cell_genes) %>% 
+                           select(data) %>% 
+                           unnest() %>% 
+                           select(ensembl_id,gene_id,methyl,none),
+                         by = c("ensembl_id","gene_id")) %>% 
+              filter(ensembl_id %in% ensembl) %>%
+              select(gene_id,ensembl_id,padj,log10pval,methyl,none,stat) 
+          },
+           options = list(
+             pageLength = 10,
+             lengthMenu = c(10,20,50,100)
+          ))),
+          fillRow(
+            column(6,
+                   radioButtons("cell_genes","Cell",
+                                inline = TRUE,
+                                choices = pull(diff_genes,cell),
+                                selected = "EBV"))))
+ 
+          #             ) )) ,style = "font-size:80%"))
 
 ```
 
-### NOKS genes
-
-```{r noks_genes}  
-
-div(
-  renderDataTable(
-    NOKS_genes %>%
-      filter(ensembl %in% noks_genes$ensembl) %>%
-      select(gene_id,ensembl,padj,log10pval,MC,none,stat),
-    options = list(
-      pageLength = 10,
-      lengthMenu = c(10,20,50,100)
-    ) ) ,style = "font-size:80%")
-
-```
 
 ### Instructions
 
@@ -740,4 +772,3 @@ div(
 * Save genes and file: When some genes are selected from the volcano or MA plots,this button will save the list in the file
 
 
---->
