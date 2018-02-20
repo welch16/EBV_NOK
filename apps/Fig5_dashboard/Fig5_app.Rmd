@@ -1,0 +1,743 @@
+---
+title: "EBV and NOKS: Treated (MC) vs Untreated"
+output:
+  flexdashboard::flex_dashboard:
+    theme: yeti
+runtime: shiny
+---
+
+```{r global,include=TRUE,echo = FALSE,eval = TRUE}
+
+load("fig5data.RData")
+
+## block to check if the packages are installed
+list.of.packages <- c("tidyverse","ggrepel","viridis","scales","shiny",
+                      "rmarkdown","flexdashboard","d3heatmap",
+                      "shinythemes","DT","RColorBrewer","hexbin",
+                      "extrafontdb","pheatmap")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages))
+  suppressMessages(install.packages(new.packages, repos = "http://cran.rstudio.com"))
+
+library(tidyverse)
+library(ggrepel)
+library(viridis)
+library(scales)
+library(shiny)
+library(d3heatmap)
+
+my_alpha = .5
+pal = viridis(1000)
+my_style = "color: #FFFFFF; background-color: #FF0000"
+my_style2 = "color: #FFFFFF; background-color: #357EC7"
+
+theme_set(
+  theme_bw()+
+    theme(legend.position = "top",
+          axis.text = element_text(size = 14),
+          axis.title = element_text(size = 16))
+)
+
+diff_genes = diff_genes %>% 
+  mutate(
+    results = map(results,separate,
+                  gene_id,
+                  into = c("ensembl_id","gene_id"),
+                  sep = "\\_")
+  )
+
+common_genes = diff_genes %>% 
+  filter(cell == "EBV") %>% 
+  select(results) %>% 
+  unnest() %>% 
+  select(gene_id)
+
+log2FC_all = rsem_data %>% 
+  select(cell,treatment,rsem) %>%
+  unnest() %>% 
+  nest(-cell,-treatment) %>% 
+  mutate(
+    data = map(data,select,gene_id,TPM) %>% 
+      map(group_by,gene_id) %>% 
+      map(summarize,
+          TPM = mean(TPM))
+  ) %>% 
+  unnest() %>% 
+  nest(-cell) %>% 
+  mutate(
+    data = map(data,spread,treatment,TPM) %>% 
+      map(mutate, log2FC = log2(1 + methyl) - log2(1 + none)) %>% 
+      map(select,gene_id,log2FC)
+  ) %>% 
+  unnest() %>% 
+  spread(cell,log2FC) %>% 
+  separate(gene_id , into = c("ensembl_id","gene_id"), sep = "\\_")
+
+MA_TPM = rsem_data %>% 
+  select(cell,treatment,rsem) %>% 
+  unnest() %>% 
+  group_by(cell,treatment,gene_id) %>% 
+  summarize(
+    TPM = mean(TPM)
+  ) %>% 
+  ungroup() %>% 
+  nest(-cell,.key = cell_MA) %>% 
+  mutate(
+    cell_MA = map(cell_MA,spread,treatment,TPM)
+  ) %>% 
+  unnest() %>% 
+  mutate_if(is.numeric,funs(log2(1 + .))) %>% 
+  mutate(
+    A = 0.5 * (methyl + none),
+    M = methyl - none
+  ) %>% 
+  nest(-cell) %>% 
+  inner_join(
+    select(diff_genes,
+           cell,results),by = "cell"
+  ) %>% 
+  mutate(
+    data = map(data,separate,
+                  gene_id,
+                  into = c("ensembl_id","gene_id"),
+                  sep = "\\_") %>%
+      map2(results,inner_join,by = c("ensembl_id","gene_id"))
+  ) %>% 
+  select(-results)
+
+
+
+```
+    
+Inputs {.sidebar}
+-------------------------------------
+
+```{r sidebar}
+# shiny inputs defined here
+
+  numericInput("fdr","False Discovery Rate",1e-20,
+               min = 1e-6,max = 1,step = .01)
+  numericInput("ps","Point size",4)
+  numericInput("ts","Axis ticks size",12)
+  numericInput("Ts","Axis title size",16)
+  numericInput("ls","Label size",6)
+  hr()
+
+  radioButtons("heatmap_type", "Heatmap type type",
+            c("most DE", "selected"), inline = TRUE)
+
+  numericInput("heatmap_most","Most DE genes",10,
+               min = 5,max = 100,step = 1)
+  
+  hr()
+  
+  textInput("file",label = "Genes file", value = "fig5_genes.tsv")
+  
+  hr()
+  textInput("loadfile",label = "Load genes",value = "fig5_genes.tsv")
+
+  
+  fillRow(flex = c(.4,.4),
+          actionButton("load","Load",icon = icon("folder-open-o"),
+                       style = my_style2),
+          actionButton("save"," Save",icon = icon("floppy-o"),
+                       style = my_style2),
+          actionButton("clean"," Clean",icon = icon("window-close"),
+                       style = my_style2))
+
+  
+  ebv_genes = reactiveValues(ensembl = NULL)
+  noks_genes = reactiveValues(ensembl = NULL)
+  drdz_genes = reactiveValues(ensembl = NULL)
+  
+  gene_colors = c("#3595D6","#92C746","#F2C100")
+  # gene_colors = c("black","darkblue","firebrick4")    
+
+    
+  ## fix these
+  observeEvent(input$save,{
+    if(!is.null(ebv_genes$ensembl) | 
+       !is.null(noks_genes$ensembl) |
+       !is.null(drdz_genes$ensembl)){
+      
+      EBV_genes = diff_genes %>% 
+        filter(cell == "EBV") %>% 
+        select(results) %>% 
+        unnest()
+      
+      NOKS_genes = diff_genes %>% 
+        filter(cell == "NOKS") %>% 
+        select(results) %>% 
+        unnest()
+      
+      DRDZ_genes = diff_genes %>% 
+        filter(cell == "dRdZ") %>% 
+        select(results) %>% 
+        unnest()
+      
+      to_save = bind_rows(
+        EBV_genes %>% 
+          filter(ensembl_id %in% ebv_genes$ensembl) %>% 
+          mutate(cell = "EBV"),
+        NOKS_genes %>% 
+          filter(ensembl_id %in% noks_genes$ensembl) %>% 
+          mutate(cell = "NOKS"),
+        DRDZ_genes %>% 
+          filter(ensembl_id %in% drdz_genes$ensembl) %>% 
+          mutate(cell = "dRdZ")) %>% 
+        select(cell,everything())
+
+      write_tsv(to_save,input$file)
+      
+    }
+  })
+  
+  
+  observeEvent(input$load,{
+    if(file.exists(input$loadfile)){
+      diff_genes = read_tsv(input$loadfile)
+
+      ebv = diff_genes %>% 
+        filter(cell == "EBV") %>% 
+        pluck("ensembl_id")
+      
+      noks = diff_genes %>% 
+        filter(cell == "NOKS") %>% 
+        pluck("ensembl_id")
+      
+      drdz = diff_genes %>% 
+        filter(cell == "dRdZ") %>% 
+        pluck("ensembl_id")
+      
+      ebv_genes$ensembl = ebv  
+      noks_genes$ensembl = noks  
+      drdz_genes$ensembl = drdz
+    }
+  })
+  
+
+  observeEvent(input$clean,{
+    drdz_genes$ensembl = NULL
+    ebv_genes$ensembl = NULL
+    noks_genes$ensembl = NULL
+  })
+  
+```
+
+   
+Column {.tabset}
+-------------------------------------
+   
+### Alignment
+
+```{r alignment}
+
+alignment %>% 
+    ggplot(
+        aes(aligned,perc))+
+    geom_point()+
+    geom_text_repel(aes(label = paste0("rep",rep)))+
+    facet_grid(treatment ~ cell)+
+    theme(axis.text.x = element_text(angle = 25,
+                                     hjust = 1))+
+    scale_x_continuous(
+        labels = comma,breaks = 1e6*seq(75,175,by = 50))+
+    scale_y_continuous(
+        labels = percent,
+        limits = c(.5,1))+
+    xlab("Number of aligned reads")+
+    ylab("Percentage of aligned reads")
+
+```   
+
+### p.value
+
+```{r pval_histogram}
+
+diff_genes %>% 
+  select(-contrast) %>% 
+  unnest() %>% 
+  ggplot(aes(pvalue))+
+  geom_histogram(boundary = 0,
+                 fill = "white",
+                 color = "black",
+                 bins = 51)+
+  facet_grid( cell ~ .)+
+  ylab("Number of genes")
+
+```
+
+### Hexbin
+
+```{r noks_vs_ebv_hexbin}
+
+log2fc_ranges <- reactiveValues(x = NULL,y = NULL)
+
+observeEvent(input$log2fc_dblclick, {
+  brush <- input$log2fc_brush
+  if (!is.null(brush)) {
+    
+    mm = min(brush$xmin,brush$ymin)
+    MM = max(brush$xmax,brush$ymax)
+    
+    log2fc_ranges$x <- c(mm,MM)
+    log2fc_ranges$y <- c(mm,MM)
+  } else {
+    log2fc_ranges$x <- NULL
+    log2fc_ranges$y <- NULL
+  }
+})
+
+observeEvent(input$log2fc_click,{
+  ff = nearPoints(log2FC_all,input$log2fc_click)
+  ebv_genes$ensembl = c(ebv_genes$ensembl, ff$ensembl_id)
+  noks_genes$ensembl = c(noks_genes$ensembl, ff$ensembl_id)
+  drdz_genes$ensembl = c(drdz_genes$ensembl, ff$ensembl_id)
+})
+
+all_choices = log2FC_all %>% 
+  select_if(is.double) %>% 
+  names()
+
+log2FC = reactive({
+
+  all_genes = c(ebv_genes$ensembl,
+                noks_genes$ensembl,
+                drdz_genes$ensembl) %>% 
+    unique()
+  
+  all_data = log2FC_all %>% 
+    filter(ensembl_id %in% all_genes)
+
+  log2FC_all %>%
+    ggplot(aes_string(input$xvar,input$yvar))+
+    stat_binhex(bins = 101) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.01,"npc")))+
+  theme(legend.position = "right",
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
+  coord_cartesian(
+    xlim = log2fc_ranges$x,
+    ylim = log2fc_ranges$y)+
+    geom_abline(slope = 1,intercept = 0,linetype =2)+
+    geom_vline(xintercept = 0,linetype = 2,colour = "red")+
+    geom_hline(yintercept = 0,linetype = 2,colour = "red")+
+    scale_color_manual(values = gene_colors)+
+    guides(colour = FALSE)+
+    geom_label_repel(data = all_data,aes(label = gene_id),
+                     colour = "black",
+                     box.padding = 0.35,
+                     point.padding = 0.5,
+                     segment.colour = "grey50",size = input$ls)
+
+})
+
+
+output$log2fc = renderPlot(log2FC())
+ 
+fillCol(flex = c(.1,.8,.1),
+        fillRow(selectInput("xvar","Cell 1",choices = all_choices,
+                            selected = all_choices[1]),
+                selectInput("yvar","Cell 2",choices = all_choices,
+                            selected = all_choices[2])),
+        plotOutput("log2fc",
+                   click = "log2fc_click",
+                   dblclick = "log2fc_dblclick",
+                   brush = brushOpts(
+                     id = "log2fc_brush",
+                     resetOnNew = TRUE
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("log2fc_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("log2fc_width","Log2FC width (in)",7),
+          numericInput("log2fc_height","Log2FC height (in)",7),
+          textInput("log2fc_file","Log2FC file","log2fc_file.pdf")))
+
+observeEvent(input$log2fc_save,{
+  
+  ggsave(
+    plot = log2FC(),
+    filename = input$log2fc_file,
+    width = unit(input$log2fc_width,"in"),
+    height = unit(input$log2fc_height,"in")
+  )})
+
+
+
+```
+
+### Volcano 
+    
+```{r volcano}
+
+volcano_ranges <- reactiveValues(x = NULL,y = NULL)
+
+observeEvent(input$volcano_dblclick, {
+  brush <- input$volcano_brush
+  if (!is.null(brush)) {
+    volcano_ranges$x <- c(brush$xmin, brush$xmax)
+    volcano_ranges$y <- c(brush$ymin, brush$ymax)
+    volcano_ranges$y[1] <- max(volcano_ranges$y[1],0)
+  } else {
+    volcano_ranges$x <- NULL
+    volcano_ranges$y <- NULL
+  }
+})
+
+observeEvent(input$volcano_click,{
+  my_genes = cell_genes()
+  ff <- nearPoints(my_genes,input$volcano_click)
+  if(input$volcano_cell == "EBV"){
+    ebv_genes$ensembl = c(ebv_genes$ensembl, ff$ensembl_id)
+  }else if(input$volcano_cell == "NOKS"){
+    noks_genes$ensembl = c(noks_genes$ensembl, ff$ensembl_id)
+  }else{
+    drdz_genes$ensembl = c(drdz_genes$ensembl, ff$ensembl_id)
+  }
+})
+
+cell_genes = reactive({
+  diff_genes %>% 
+    filter(cell == input$volcano_cell) %>% 
+    select(results) %>% 
+    unnest()
+})
+
+volcano = reactive({
+
+
+  all_data = tribble(
+    ~ cell , ~ data,
+    "EBV" , cell_genes() %>% 
+      filter(ensembl_id %in% ebv_genes$ensembl),
+    "NOKS", cell_genes() %>% 
+      filter(ensembl_id %in% noks_genes$ensembl),
+    "dRdZ", cell_genes() %>% 
+      filter(ensembl_id %in% drdz_genes$ensembl)) %>%
+    unnest()
+    
+  cell_genes() %>%
+    filter(!is.na(padj)) %>% 
+    ggplot(aes(log2FoldChange,log10pval,
+               colour = if_else(padj <= input$fdr,"yes","no")))+
+    geom_point(size = input$ps,alpha = .75)+
+    geom_label_repel(data = all_data,aes(fill = cell,label = gene_id),
+                      colour = "white",box.padding = 0.35,
+                     point.padding = 0.5,
+                      segment.colour = "grey50",size = input$ls)+
+    scale_fill_manual(values = gene_colors)+
+    guides(fill = FALSE)+
+    scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
+    coord_cartesian(
+      xlim = volcano_ranges$x ,
+      ylim = volcano_ranges$y
+    )+
+    theme(
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
+    ylab("-log10(pvalue)")+
+    geom_vline(xintercept = 0,colour = "black",linetype = 2)
+
+})
+
+output$volcano = renderPlot(volcano())
+ 
+fillCol(flex = c(.1,.8,.1),
+        fillRow( column(6,selectInput("volcano_cell","Cell",
+                                      choices = pull(diff_genes,cell),
+                                      selected = "EBV"))),
+        plotOutput("volcano",
+                   click = "volcano_click",
+                   dblclick = "volcano_dblclick",
+                   brush = brushOpts(
+                     id = "volcano_brush",
+                     resetOnNew = TRUE
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("volcano_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("volcano_width","Volcano width (in)",7),
+          numericInput("volcano_height","Volcano height (in)",7),
+          textInput("volcano_file","Volcano file","volcano_file.pdf")))
+
+observeEvent(input$volcano_save,{
+  
+  ggsave(
+    plot = volcano(),
+    filename = input$volcano_file,
+    width = unit(input$volcano_width,"in"),
+    height = unit(input$volcano_height,"in")
+  )})
+
+
+
+
+```
+
+
+### MA 
+
+```{r ma}
+
+ma_ranges <- reactiveValues(x = NULL,y = NULL)
+
+observeEvent(input$ma_dblclick, {
+  brush <- input$ma_brush
+  if (!is.null(brush)) {
+    ma_ranges$x <- c(brush$xmin, brush$xmax)
+    ma_ranges$y <- c(brush$ymin, brush$ymax)
+    ma_ranges$x[1] <- max(ma_ranges$x[1],0)
+  } else {
+    ma_ranges$x <- NULL
+    ma_ranges$y <- NULL
+  }
+})
+
+observeEvent(input$ma_click,{
+  my_genes = cell_tpm()
+  ff <- nearPoints(my_genes,input$volcano_click)
+  if(input$volcano_cell == "EBV"){
+    ebv_genes$ensembl = c(ebv_genes$ensembl, ff$ensembl_id)
+  }else if(input$volcano_cell == "NOKS"){
+    noks_genes$ensembl = c(noks_genes$ensembl, ff$ensembl_id)
+  }else{
+    drdz_genes$ensembl = c(drdz_genes$ensembl, ff$ensembl_id)
+  }
+})
+
+cell_tpm = reactive({
+  MA_TPM %>% 
+    filter(cell == input$ma_cell) %>% 
+    select(data) %>% 
+    unnest()
+  
+})
+
+MA = reactive({
+
+  all_data = tribble(
+    ~ cell , ~ data,
+    "EBV" , cell_tpm() %>% 
+      filter(ensembl_id %in% ebv_genes$ensembl),
+    "NOKS", cell_tpm() %>% 
+      filter(ensembl_id %in% noks_genes$ensembl),
+    "dRdZ", cell_tpm() %>% 
+      filter(ensembl_id %in% drdz_genes$ensembl)) %>%
+    unnest()
+  
+  
+  cell_tpm() %>%
+    filter(!is.na(padj)) %>% 
+    ggplot(aes(A,M,
+               colour = if_else(padj <= input$fdr,"yes","no")))+
+    geom_point(size = input$ps,alpha = .75)+
+    geom_label_repel(data = all_data,aes(fill = cell,label = gene_id),
+                     colour = "white",box.padding = 0.35,
+                     point.padding = 0.5,
+                     segment.colour = "grey50",size = input$ls)+
+    scale_fill_manual(values = gene_colors)+
+    guides(fill = FALSE)+
+    scale_color_brewer(palette = "Set1",name = "Diff. Expressed")+
+    coord_cartesian(
+      xlim = ma_ranges$x ,
+      ylim = ma_ranges$y
+    )+
+    theme(
+        axis.text = element_text(size = input$ts),
+        axis.title = element_text(size = input$Ts),
+        legend.text = element_text(size = input$ts),
+        legend.title = element_text(size = input$ts))+
+    geom_hline(yintercept = 0,colour = "black",linetype = 2)
+  
+})
+
+output$ma = renderPlot(MA())
+ 
+fillCol(flex = c(.1,.8,.1),
+        fillRow(
+          column(6,selectInput("ma_cell","Cell",
+                               choices = pull(MA_TPM,cell),
+                               selected = "dRdZ"))
+        ),
+        plotOutput("ma",
+                   click = "ma_click",
+                   dblclick = "ma_dblclick",
+                   brush = brushOpts(
+                     id = "ma_brush",
+                     resetOnNew = TRUE
+                     )),
+        fillRow(flex = c(.1,.3,.3,.3),
+          actionButton("ma_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("ma_width","MA width (in)",7),
+          numericInput("ma_height","MA height (in)",7),
+          textInput("ma_file","MA file","ma_file.pdf")))
+
+observeEvent(input$ma_save,{
+  
+  ggsave(
+    plot = MA(),
+    filename = input$ma_file,
+    width = unit(input$ma_width,"in"),
+    height = unit(input$ma_height,"in")
+  )})
+
+
+```
+
+<!---
+### Heatmap
+
+```{r heatmap}
+
+ebv_mat = reactive({
+
+  my_mat = rlogmat
+
+  if(input$heatmap_type == "most DE"){
+    genes = EBV_genes %>%
+      arrange(desc(log10pval)) %>%
+      head(input$heatmap_most )
+
+      idx = genes %>%
+        mutate(
+          idx = paste(ensembl,gene_id,sep = "_")
+        ) %>%
+        pluck("idx")
+      
+      if(length(idx) <= 1){
+        my_mat = my_mat[1:2,]
+      }else{
+        my_mat = my_mat[rownames(my_mat) %in% idx, ]
+      }
+
+  }else{
+    if(is.null(ebv_genes$ensembl)){
+      my_mat = my_mat[sample(nrow(my_mat),3),]
+    }else{
+      genes = EBV_genes %>%
+        filter(ensembl %in% ebv_genes$ensembl)
+
+      idx = genes %>%
+        mutate(
+          idx = paste(ensembl,gene_id,sep = "_")
+        ) %>%
+        pluck("idx")
+      my_mat = my_mat[rownames(my_mat) %in% idx, ]
+    }
+
+  }
+  rownames(my_mat) = rownames(my_mat) %>%
+    str_split("_") %>%
+    map_chr( ~ .[2])
+
+  colnames(my_mat) = colnames(my_mat) %>%
+    str_replace("RNAseq-","")
+  
+  my_mat
+
+})
+
+fillCol(flex = c(1,.1),
+        renderD3heatmap({
+          
+          my_mat = ebv_mat()
+          pal = viridis(100)
+          
+          d3heatmap(my_mat,
+                    colors = pal,
+                    xaxis_font_size = 12,
+                    yaxis_font_size = 12)}),
+        fillRow(flex = c(.1,.3,.3,.3),
+                actionButton("ebv_heat_save","",icon = icon("camera"),
+                       style = my_style),
+          numericInput("ebv_heat_width","EBV Heatmap width (in)",7),
+          numericInput("ebv_heat_height","EBV Heatmap height (in)",7),
+          textInput("ebv_heat_file","EBV Heatmap file","ebvh_file.pdf")))
+
+observeEvent(input$ebv_heat_save,{
+
+  pal = viridis(100)
+  
+  pheatmap::pheatmap(
+    mat = ebv_mat(),
+    scale = "row",
+    color = pal,
+    fontsize = input$ts,
+    width = input$ebv_heat_width,
+    height = input$ebv_heat_height,
+    filename = input$ebv_heat_file
+  )
+
+})
+
+
+```
+
+
+<!---
+### EBV genes 
+
+```{r ebv_genes}  
+
+div(
+  renderDataTable(
+    EBV_genes %>%
+      filter(ensembl %in% ebv_genes$ensembl) %>%
+      select(gene_id,ensembl,padj,log10pval,MC,none,stat),
+    options = list(
+      pageLength = 10,
+      lengthMenu = c(10,20,50,100)
+    ) ) ,style = "font-size:80%")
+
+```
+
+### NOKS genes
+
+```{r noks_genes}  
+
+div(
+  renderDataTable(
+    NOKS_genes %>%
+      filter(ensembl %in% noks_genes$ensembl) %>%
+      select(gene_id,ensembl,padj,log10pval,MC,none,stat),
+    options = list(
+      pageLength = 10,
+      lengthMenu = c(10,20,50,100)
+    ) ) ,style = "font-size:80%")
+
+```
+
+### Instructions
+
+**Alignment** - This plot is fixed, I think for the supplement
+
+**p.values** - Also fixed, there is no deviation of the assumptions. Both look like they are supposed: a peak at zero and then approx. uniform. A quick note, is that the peak at zero is really tall, which means that there are a lot of diff. expressed genes. We may want to use smaller values for setting the FDR (by default 1e-20).
+
+**volcano** and **MA plots** - In these plots, can click the point and build a table of DE genes. To change the scale of the figure: brush and double click. If you double click without brush that will restart to the initial plot. Just click on a gene to label it, the results are stored in both **heatmaps** and **Gene table**. Removed the MA-DESeq plot because it didn't seem very useful.
+
+**heatmaps** The TPM heatmaps from fig2 were hard to distinguish, so I tought it would be better to remove them, and only keep the model ones (is the same model for both, the differences are going to be the p.value used to rank or the genes selected)
+
+**tables** They are separated for display, but the `save genes` button will save everything in the genes file
+
+**Sidebar**
+
+* False discovery rate: The smaller, the test results are more conservative
+
+* Point size: Just to make the plots to look just right
+
+* Clean gene lists: To start over again (changed to have one per cell)
+
+* Save genes and file: When some genes are selected from the volcano or MA plots,this button will save the list in the file
+
+
+--->
