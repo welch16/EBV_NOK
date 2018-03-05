@@ -1,5 +1,5 @@
 ---
-title: "R Notebook"
+title: "Effect of EBV infection in dRdZ mutant"
 output: 
   html_document:
     toc: yes
@@ -13,8 +13,8 @@ From Eric's email:
 > What the figure aims to show is that the effect of EBV infection is lost with the dRdZ mutant which looks more like an uninfected NOK with respect to the change in the signature genes upon MC treatment.
 
 We prepare the data, basically load and remove genes with very low counts, 
-```{r prepare_data,message=FALSE,warning=FALSE,cache =TRUE,include=FALSE}
 
+```{r load,include=FALSE,echo=FALSE,eval=TRUE}
 library(tidyverse)
 library(DESeq2)
 library(here)
@@ -30,6 +30,11 @@ knitr::opts_chunk$set(eval = TRUE,
                     warning = FALSE,
                     message = FALSE)
 
+
+```
+
+
+```{r prepare_data,message=FALSE,warning=FALSE,cache =TRUE,include=FALSE}
 rsem_dr = here("data/RSEM/hg19/Sept17")
 align_dr = here("manuscript/logs/Sept17")
 
@@ -145,7 +150,7 @@ coldata = rsem_data %>%
 
 Since we want to obtain the genes that are differentially expressed (upregulated / downregulated) due to the treatment's effect, we need to prepare two models, one coded in terms of the full model and another in terms of the interactions. 
 
-```{r deseq,cache = TRUE,dependson="prepare_data"}
+```{r deseq,cache = TRUE,dependson="prepare_data",message=FALSE}
 deseq = DESeqDataSetFromMatrix(
   count_matrix,colData = coldata,
   design = ~ interac
@@ -196,7 +201,11 @@ drdz_diff_genes = do_contrast(deseq, c("interac","dRdZ.methyl","dRdZ.none"))
 
 ```
 
-2. Compare EBV and NOKS differentially expressed genes vs all by `methyl` treat
+    - `all_diff_genes` tests the hypothesis of the treatment effect is zero, regardless of treatment
+
+    - `cell_diff_genes`  tests the hypothesis of the treatment effect is zero, when the cell is specified.
+
+2. Compare EBV and NOKS differentially expressed genes vs all by `methyl` treat. 
 
 ```{r venn,out.height=2}
 
@@ -220,23 +229,23 @@ upr = TRUE
 Vupr_genes = list(
   "all" = symbols_expressed(all_diff_genes,fdr,upr),
   "ebv" = symbols_expressed(ebv_diff_genes,fdr,upr),
-  "noks" = symbols_expressed(noks_diff_genes,fdr,upr)
-#  "drdz" = symbols_expressed(drdz_diff_genes,fdr,upr)
+  "noks" = symbols_expressed(noks_diff_genes,fdr,upr),
+  "drdz" = symbols_expressed(drdz_diff_genes,fdr,upr)
 ) %>% Venn()
 
 upr = FALSE
 Vdown_genes = list(
   "all" = symbols_expressed(all_diff_genes,fdr,upr),
   "ebv" = symbols_expressed(ebv_diff_genes,fdr,upr),
-  "noks" = symbols_expressed(noks_diff_genes,fdr,upr)
-#  "drdz" = symbols_expressed(drdz_diff_genes,fdr,upr)
+  "noks" = symbols_expressed(noks_diff_genes,fdr,upr),
+  "drdz" = symbols_expressed(drdz_diff_genes,fdr,upr)
 ) %>% Venn() 
 
 
 
 ```
 
-  - Upregulated genes
+    - Upregulated genes
 
 
 ```{r upr_genes}
@@ -249,7 +258,7 @@ plot(Vupr_genes,doWeights = FALSE,
 
 ```
 
-  - Downregulated genes
+    - Downregulated genes
   
 ```{r down_reg}
 plot(Vdown_genes,doWeights = FALSE,
@@ -257,184 +266,154 @@ plot(Vdown_genes,doWeights = FALSE,
 
 ```
 
+```{r log2fun,include=FALSE}
 
-3. Compare the genes that are differentially expressed by treatment for ebv or noks but not all.
+diff_genes = tribble(
+  ~ gene_set , ~ results,
+  "all", all_diff_genes,
+  "ebv", ebv_diff_genes,
+  "noks", noks_diff_genes,
+  "drdz", drdz_diff_genes
+) %>% 
+  unnest()
 
-```{r gene_sets,fig.width=8,fig.height=4}
+
+log2FC_plot <- function(gene_symbols,diff_genes, log = FALSE)
+{
+  dt = diff_genes %>% 
+    filter(symbol %in% gene_symbols) %>% 
+    filter(gene_set != "all") %>% 
+    mutate(symbol = factor(symbol,levels = gene_symbols),
+           cond = rep(log,nrow(.)),
+           respo = if_else(cond,log2FoldChange,2^log2FoldChange)) 
+  dt %>% 
+    ggplot(aes(symbol,respo,colour = gene_set))+
+    geom_point(size = 3, shape = 1)+
+    scale_color_brewer(palette = "Set1",name = "cell")+
+    theme(
+      legend.position = "top",
+      axis.text.x = element_text(angle = 30,hjust = 1)
+    )+
+    ylab(if_else(log,"log2 Fold Change","Fold Change"))
+  
+}
+
+
+```
+
+# Recovery: plot from slide    
+  
+```{r prev_plot,fig.height=4,fig.width=7,results='hold'}  
+
+myc_pathway = c("MYC","MYBBP1A","MCM6","KPNA2",
+                "KIF4A","HMGB2","CDK4")
+
+log2FC_plot(myc_pathway,diff_genes)
+log2FC_plot(myc_pathway,diff_genes,TRUE)
+
+
+```
+
+- The ranges and the order of the cells kinda agree, but using the model estimated fold changes, we can see that EBV is not at the top for every gene, where `KPNA2` could be the most notable example.
+
+## Gene sets
+
+We take the genes that are differentially expressed in EBV or NOKS but not the rest.
+
+```{r venn_genes}
 
 upr_genes = Vupr_genes@IntersectionSets %>% 
-  tibble(
-    label = names(.),
-    genes = .
-  ) %>% 
-  filter( map_int(genes,length) > 0  ) %>% 
-  mutate(
-    genes = map(genes, ~ tibble(symbol = .))
-  ) %>% 
+  tibble( venn = names(.), symbol = .) %>% 
+  filter(map_int(symbol ,length)> 0) %>% 
+  mutate(symbol = map(symbol, ~ tibble(symbol = .))) %>% 
   unnest() %>% 
-  inner_join(
-    ebv_diff_genes %>% 
-      select(symbol,log2FoldChange) %>% 
-      dplyr::rename(ebv = log2FoldChange),by = "symbol") %>% 
-  inner_join(
-    noks_diff_genes %>% 
-      select(symbol,log2FoldChange) %>% 
-      dplyr::rename(noks = log2FoldChange), by = "symbol") %>% 
-  inner_join(
-    drdz_diff_genes %>% 
-      select(symbol,log2FoldChange) %>% 
-      dplyr::rename(drdz = log2FoldChange),by = "symbol")
-  
+  inner_join(diff_genes,by = "symbol")
+
 down_genes = Vdown_genes@IntersectionSets %>% 
-  tibble(
-    label = names(.),
-    genes = .
-  ) %>% 
-  filter( map_int(genes,length) > 0  ) %>% 
-  mutate(
-    genes = map(genes, ~ tibble(symbol = .))
-  ) %>% 
+  tibble( venn = names(.), symbol = .) %>% 
+  filter(map_int(symbol ,length)> 0) %>% 
+  mutate(symbol = map(symbol, ~ tibble(symbol = .))) %>% 
   unnest() %>% 
-  inner_join(
-    ebv_diff_genes %>% 
-      select(symbol,log2FoldChange) %>% 
-      dplyr::rename(ebv = log2FoldChange),by = "symbol") %>% 
-  inner_join(
-    noks_diff_genes %>% 
-      select(symbol,log2FoldChange) %>% 
-      dplyr::rename(noks = log2FoldChange), by = "symbol") %>% 
-  inner_join(
-    drdz_diff_genes %>% 
-      select(symbol,log2FoldChange) %>% 
-      dplyr::rename(drdz = log2FoldChange),by = "symbol")
+  inner_join(diff_genes,by = "symbol")
 
 ```
 
+    - Upregulated
 
+```{r log2fc_upr,fig.width=9,fig.height=4}
 
-
-```{r plot_upr,fig.width=9,fig.height=5}
-
-plot_genes = upr_genes %>% 
+upr_genes %>% 
+  filter(venn %in% c("0110","0100","0010")) %>% 
+  filter(gene_set != "all") %>% 
+  nest(-venn) %>% 
   mutate(
-    drdz_minus_noks = drdz - noks,
-    drdz_minus_ebv = drdz - ebv
+    log2fc = map(data,select,symbol,gene_set,log2FoldChange) %>% 
+      map(spread,gene_set,log2FoldChange) %>% 
+      map(mutate, gene_id = row_number(desc(drdz))) %>% 
+      map(select,symbol,gene_id,everything()) %>% 
+      map(gather,cell,log2FC,-(1:2))
   ) %>% 
-  arrange(desc(drdz_minus_ebv)) %>% 
-  group_by(label) %>% 
+  select(venn,log2fc) %>% 
+  unnest() %>% 
   mutate(
-    symbol_id = seq_len(length(symbol))
-  ) %>%
-  ungroup() %>% 
-  select(label,symbol,symbol_id,contains("minus")) %>% 
-  filter(str_detect(label,"0[0|1][0|1]"))  %>% 
-  gather( Cell,difference, -(1:3)) %>% 
-  mutate(
-    label = factor(label),
-    label = recode(label , 
-                   '010' = "EBV only",
-                   '001' = "NOKS only",
-                   '011' = "Both"),
-    Cell = recode(Cell,
-                  'ebv' = "EBV",
-                  'noks' = "NOKS",
-                  "drdz"= "dRdZ")
-  ) 
-
-label_genes = plot_genes %>% 
-  filter(abs(difference ) > 1) %>% 
-  filter(!(label == "NOKS only" & Cell == "drdz_minus_noks" )) %>% 
-  filter(!(label == "EBV only" & Cell == "drdz_minus_ebv")) %>% 
-  filter(!label == "Both")
-
-plot_genes %>% 
-  ggplot(aes(symbol_id,difference ,colour = Cell))+
-  geom_line()+
-  facet_grid( . ~ label,space = "free",scales = "free")+
-  scale_color_brewer(palette= "Set1",name = "Difference")+
-  theme(
-    legend.position = "top",
-    axis.title.x = element_blank()
-  )+
-  geom_hline(yintercept = 0,linetype =2 )+
-#  geom_text_repel(data = label_genes,aes(label = symbol),show.legend = FALSE)+
-  ggtitle("Upregulated genes")
-
-
-```
-
-```{r plot_down,fig.width=9,fig.height=5}
-
-plot_genes = down_genes %>% 
-  mutate(
-    drdz_minus_noks = drdz - noks,
-    drdz_minus_ebv = drdz - ebv
+    venn = recode_factor(venn,
+                  `0100` = "Only EBV",
+                  `0010` = "Only NOKS",
+                  `0110` = "Both NOKS and EBV")
   ) %>% 
-  arrange(desc(drdz_minus_noks)) %>% 
-  group_by(label) %>% 
-  mutate(
-    symbol_id = seq_len(length(symbol))
-  ) %>%
-  ungroup() %>% 
-  select(label,symbol,symbol_id,contains("minus")) %>% 
-  filter(str_detect(label,"0[0|1][0|1]"))  %>% 
-  gather( Cell,difference, -(1:3)) %>% 
-  mutate(
-    label = factor(label),
-    label = recode(label , 
-                   '010' = "EBV only",
-                   '001' = "NOKS only",
-                   '011' = "Both"),
-    Cell = recode(Cell,
-                  'ebv' = "EBV",
-                  'noks' = "NOKS",
-                  "drdz"= "dRdZ")
-  ) 
-
-label_genes = plot_genes %>% 
-  filter(abs(difference ) > 1) %>% 
-  filter(!(label == "NOKS only" & Cell == "drdz_minus_noks" )) %>% 
-  filter(!(label == "EBV only" & Cell == "drdz_minus_ebv")) %>% 
-  filter(!label == "Both")
-
-plot_genes %>% 
-  ggplot(aes(symbol_id,difference ,colour = Cell))+
-  geom_line()+
-  facet_grid( . ~ label,space = "free",scales = "free")+
-  scale_color_brewer(palette= "Set1",name = "Difference")+
-  theme(
-    legend.position = "top",
-    axis.title.x = element_blank()
+  ggplot(
+    aes(gene_id,log2FC,colour = cell)
   )+
-  geom_hline(yintercept = 0,linetype =2 )+
-#  geom_text_repel(data = label_genes,aes(label = symbol),show.legend = FALSE,
-#                  min.segment.length = 1)+
-  ggtitle("Downregulated genes")
+  geom_line()+
+  facet_grid( ~ venn,scales = "free_x",space = "free_x")+
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "top"
+  )+
+  geom_hline(yintercept = 0,linetype = 2)+
+  scale_color_brewer(palette = "Set1")
 
 
-```
-
-
-```{r venn_all}
-
-fdr = 0.05
-upr = TRUE
-Vupr_genes = list(
-  "all" = symbols_expressed(all_diff_genes,fdr,upr),
-  "ebv" = symbols_expressed(ebv_diff_genes,fdr,upr),
-  "noks" = symbols_expressed(noks_diff_genes,fdr,upr),
-  "drdz" = symbols_expressed(drdz_diff_genes,fdr,upr)
-) %>% Venn()
-
-upr = FALSE
-Vdown_genes = list(
-  "all" = symbols_expressed(all_diff_genes,fdr,upr),
-  "ebv" = symbols_expressed(ebv_diff_genes,fdr,upr),
-  "noks" = symbols_expressed(noks_diff_genes,fdr,upr),
-  "drdz" = symbols_expressed(drdz_diff_genes,fdr,upr)
-) %>% Venn() 
-
+  
 
 ```
 
+    - Upregulated
 
+```{r log2fc_down,fig.width=9,fig.height=4}
+
+down_genes %>% 
+  filter(venn %in% c("0110","0100","0010")) %>% 
+  filter(gene_set != "all") %>% 
+  nest(-venn) %>% 
+  mutate(
+    log2fc = map(data,select,symbol,gene_set,log2FoldChange) %>% 
+      map(spread,gene_set,log2FoldChange) %>% 
+      map(mutate, gene_id = row_number(desc(drdz))) %>% 
+      map(select,symbol,gene_id,everything()) %>% 
+      map(gather,cell,log2FC,-(1:2))
+  ) %>% 
+  select(venn,log2fc) %>% 
+  unnest() %>% 
+  mutate(
+    venn = recode_factor(venn,
+                  `0100` = "Only EBV",
+                  `0010` = "Only NOKS",
+                  `0110` = "Both NOKS and EBV")
+  ) %>% 
+  ggplot(
+    aes(gene_id,log2FC,colour = cell)
+  )+
+  geom_line()+
+  facet_grid( ~ venn,scales = "free_x",space = "free_x")+
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "top"
+  )+
+  geom_hline(yintercept = 0,linetype = 2)+
+  scale_color_brewer(palette = "Set1")
+
+
+  
+
+```
