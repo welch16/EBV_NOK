@@ -378,7 +378,7 @@ upr_genes %>%
 
 ```
 
-    - Upregulated
+    - Downregulated
 
 ```{r log2fc_down,fig.width=9,fig.height=4}
 
@@ -417,3 +417,87 @@ down_genes %>%
   
 
 ```
+
+It is hard to tell if there is a relationship in this case. Clearly, there are some genes with the opposite `log2FC` sign than the one expeced (for example positive when checking downregulating genes). Now, we are going to focus in the genes that the there is a large difference between (at least $\geq 2$ ) EBV and NOKS effects:
+
+
+```{r detail , fig.width=9,fig.height=4,results="hold"}
+
+upr_genes %>% 
+  filter(venn %in% c("0110","0100","0010")) %>% 
+  filter(gene_set != "all") %>% 
+  nest(-venn) %>% 
+  mutate(
+    log2fc = map(data,select,symbol,gene_set,log2FoldChange) %>% 
+      map(spread,gene_set,log2FoldChange) %>% 
+      map(filter,abs(ebv - noks) >= 2 ) %>% 
+      map(mutate, gene_id = row_number(desc(drdz))) %>% 
+      map(arrange,desc(drdz)) %>% 
+      map(select,symbol,gene_id,everything()) %>% 
+      map(gather,cell,log2FC,-(1:2))
+  ) %>% 
+  select(venn,log2fc) %>% 
+  unnest() %>% 
+  mutate(
+    venn = recode_factor(venn,
+                  `0100` = "Only EBV",
+                  `0010` = "Only NOKS",
+                  `0110` = "Both NOKS and EBV")) %>% 
+  arrange(gene_id) %>% 
+  mutate(
+    symbol = factor(symbol,levels = unique(symbol))
+  ) %>% 
+  filter(!str_detect(venn,"Both")) %>% 
+  ggplot(aes(symbol,log2FC,colour = cell))+
+  geom_point(shape = 1)+
+  scale_color_brewer(palette = "Set1")+
+  facet_grid( ~ venn,scales = "free_x",space = "free_x")+
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle =90,hjust = 1,vjust = .5,size = 6),
+    legend.position = "top"
+  )+
+  geom_hline(yintercept = 0,linetype = 2)+
+  ggtitle("Upregulated")
+
+down_genes %>% 
+  filter(venn %in% c("0110","0100","0010")) %>% 
+  filter(gene_set != "all") %>% 
+  nest(-venn) %>% 
+  mutate(
+    log2fc = map(data,select,symbol,gene_set,log2FoldChange) %>% 
+      map(spread,gene_set,log2FoldChange) %>% 
+      map(filter,abs(ebv - noks) >= 2 ) %>% 
+      map(mutate, gene_id = row_number(desc(drdz))) %>% 
+      map(arrange,desc(drdz)) %>% 
+      map(select,symbol,gene_id,everything()) %>% 
+      map(gather,cell,log2FC,-(1:2))
+  ) %>% 
+  select(venn,log2fc) %>% 
+  unnest() %>% 
+  mutate(
+    venn = recode_factor(venn,
+                  `0100` = "Only EBV",
+                  `0010` = "Only NOKS",
+                  `0110` = "Both NOKS and EBV")) %>% 
+  arrange(gene_id) %>% 
+  mutate(
+    symbol = factor(symbol,levels = unique(symbol))
+  ) %>% 
+  filter(!str_detect(venn,"Both")) %>% 
+  ggplot(aes(symbol,log2FC,colour = cell))+
+  geom_point(shape = 1)+
+  scale_color_brewer(palette = "Set1")+
+  facet_grid( ~ venn,scales = "free_x",space = "free_x")+
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(angle =90,hjust = 1,vjust = .5,size =6 ),
+    legend.position = "top"
+  )+
+  geom_hline(yintercept = 0,linetype = 2)+
+  ggtitle("Downregulated")
+
+```
+
+
+
