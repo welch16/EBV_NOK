@@ -1,0 +1,303 @@
+---
+title: "Pathway analysis - Fig5"
+output: 
+  html_document:
+    toc: yes
+    theme: simplex
+---
+
+# Objective
+
+The idea of this document is to draft what we need to do to integrate the GSEA pathway analysis with the diff. expression analysis we did with DESeq2. We propose the following pipeline:
+
+1. We fit a model with a formula of the type ` Count_ij ~ Treat_i + Cell_j + Interaction_ij`
+
+2. For every gene, test an hypothesis if there is a treatment effect in the cell specific expression.
+
+3. For every gene, summarize the TPM level of each treatment, cell and interaction.
+
+4. For every cell, take the genes that are differentially expressed and are among the top $K$ most expressed genes for both treatments (the assumption here is to avoid cases where the `log2FC` value is extreme due to a very low quantity of reads in either treatment).
+
+5. Using the t.stat values as a signal-2-noise metric, do a pathway analysis with GSEA.
+
+```{r load,include=FALSE,echo=FALSE,eval=TRUE}
+library(tidyverse)
+library(here)
+library(viridis)
+library(ggtech)
+library(hexbin)
+library(clusterProfiler)
+library(forcats)
+library(gridExtra)
+library(scales)
+library(knitr)
+library(ggrepel)
+
+pal = viridis(1e3, option = "D")
+
+K =5e3
+
+theme_set(theme_bw() + 
+            theme(legend.position = "top"))
+
+knitr::opts_chunk$set(eval = TRUE,
+                      echo = FALSE,
+                    include = TRUE,
+                    warning = FALSE,
+                    message = FALSE)
+
+load(here("apps/Fig5_dashboard/fig5data.RData"))
+
+
+```
+
+# TPM summary 
+
+```{r tpm_summary,cache=TRUE, include=FALSE}
+
+tpm = rsem_data %>% 
+  unnest() %>% 
+  group_by(cell,treatment,gene_id) %>% 
+  summarize_at(
+    vars(one_of("TPM")),
+    funs( mean = mean(.),
+          median = median(.),
+          q75 = quantile(.,prob = .75))) %>% 
+  ungroup() %>% 
+  gather(metric, value,-(1:3)) %>% 
+  nest(-metric,-cell,.key = "tpm.rank") %>% 
+  mutate(
+    tpm.rank = map(tpm.rank,spread,treatment,value) %>% 
+      map( mutate_if,is.numeric,funs(dense_rank(desc(.))))
+  )
+
+```
+
+We ranked three summary metrics by its decreasing order: `mean`, `median` and the third quartile `q75`. In the figure below, we can see that regardless of the metric we pick, we are going to observe several genes with a low amount of reads without the treatment but well expressed with treatment. There is a clear trend in the TPM levels for both treatment, and the gene surrounding the blue line are the more likely to be differentially expressed (not exactly a neighborhood around the line but the data cloud surrounding it).
+
+```{r tpm_rank, fig.width=7.5,fig.height=7.5,message=FALSE}
+
+
+tpm %>% 
+  unnest() %>% 
+  ggplot(aes(none,methyl))+
+  stat_binhex(bins = 50)+
+  facet_grid(cell ~ metric)+
+  scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.01,"npc"),
+                           barwidth = unit(0.9,"npc")))+
+  geom_abline( slope = -1 , intercept = K,
+               linetype = 2,colour = "orange",
+               size = 1.5)+
+  geom_smooth(se = FALSE,size = 1.5)
+ 
+```
+
+Two ideas:
+
+a. Take the genes that are below the orange line. Those are the genes with the highest TPM, and we can expect for those differentially expressed genes to be part of the cell footprint.
+
+b. Take the genes in the data cloud around the blue line. The genes that are differentially expressed are not going to ocurr due to the read imbalance in the treatment (i.e. the bias we had been dealing with), but the genes that are on the top of the line are more likely to not be important, as those are genes with the lowest TPM.
+
+I am going to focus on __a__ as it seems more conservative and try the mean ranking, as the median appears to shrink everything and the quantile seems to behave similarly to the mean. 
+
+# Differentially expresed genes under this filter
+
+```{r diff_genes_filter,cache=TRUE,dependson="tpm_summary"}
+
+diff_genes = diff_genes %>% 
+  left_join(tpm,by = "cell") %>% 
+  filter(metric == "mean") %>% 
+  mutate(
+    results = map2(results,tpm.rank,inner_join,by = "gene_id")
+  ) %>% 
+  dplyr::select(-metric,-tpm.rank)
+
+rm(tpm)
+```
+
+```{r volcano_plot,fig.height=3,fig.width=8.5,fig.align="center"}
+fdr = 1e-2
+diff_genes = diff_genes %>% 
+  dplyr::select(-contrast) %>% 
+  unnest() %>% 
+  filter(methyl <= K & none <= K) %>% 
+  mutate(
+    DE = if_else(padj <= fdr, "yes","no"),
+    UPR = if_else(log2FoldChange >= 0 , "yes","no")
+  ) %>% 
+  separate(gene_id,into = c("ensembl","symbol"),sep = "_",
+           extra = "drop")
+
+diff_genes %>% 
+  ggplot(aes(log2FoldChange,log10pval,colour = DE))+
+    geom_point()+
+    scale_color_tech("X23andme")+
+    facet_grid( ~ cell)
+
+```
+
+The plot above is a bit missleading because, even though we are filtering tons of genes it is not noticeable in the plot. So, we have in total:
+
+```{r de_genes}
+
+diff_genes %>% 
+  group_by(cell,DE) %>% 
+  summarize(
+    n = n()
+    ) %>% 
+  spread(DE,n) %>% 
+  ungroup()
+  
+```
+
+# GSEA analysis
+
+There are two alternatives to do the GSEA analysis:
+
+i. Use all the genes in the list
+ii. Use only the differentially expressed genes
+
+
+
+```{r hallmark, include=FALSE}
+gmt_files = here::here("data/Pathway") %>% 
+  list.files(full.names = TRUE,recursive = TRUE) %>% 
+  str_subset("v5.1") %>% 
+  str_subset(".gmt") %>% 
+  str_subset("h.all") %>% 
+  set_names(
+    {
+      basename(.) %>% 
+        str_replace(".gmt","") %>% 
+        str_split("\\.") %>% 
+        map_chr( ~ .[length(.)])
+    }
+  ) %>% 
+  pluck("symbols")
+
+
+hallmark = gmt_files %>% 
+  map(read.gmt) %>% 
+  unlist(recursive = FALSE) %>% 
+  as_tibble()
+
+```
+
+
+
+```{r gsea_analysis,cache=TRUE,dependson="diff_genes_filter"}
+
+name <- function(.x){
+  nms = pull(.x,symbol)
+  pull(.x,stat) %>% set_names(nms)
+  
+}
+
+gsea = diff_genes %>% 
+  nest(-cell,.key = "results") %>% 
+  mutate(
+    gene_list = map(results,arrange,desc(stat) ) %>% map(name),
+    gene_list_diff = map(results,filter,padj <= fdr) %>% 
+      map(arrange,desc(stat)) %>% 
+      map(name)) %>% 
+  mutate(
+    gsea_full = map(gene_list,GSEA,TERM2GENE = hallmark,
+               verbose = FALSE),
+    gsea_diff = map(gene_list_diff,GSEA,TERM2GENE = hallmark,
+                    verbose = FALSE)) %>% 
+  mutate_at(vars(contains("gsea")),
+            funs( res = map(. , "result") %>% 
+                    map(as_tibble)))
+
+
+
+
+```
+
+
+## All genes
+
+```{r gsea_full_plots,include=TRUE,fig.width=9,fig.height=8}
+
+plot_data = gsea %>%
+  dplyr::select(cell,gsea_full_res) %>% 
+  mutate(
+    gsea_full_res = map(gsea_full_res,arrange,NES)
+  ) %>%
+  unnest() %>% 
+  mutate(
+    order = row_number()
+  )
+
+plot_data %>% 
+  ggplot(
+    aes(order,NES,fill = pvalue)
+  )+
+  geom_bar(stat = "identity")+
+  facet_grid( cell ~ .,scales = "free",space = "free")+
+  scale_fill_gradientn(colours = pal,
+                        guide = guide_colourbar(title = NULL,
+                        barheight = unit(0.8,"npc"),
+                        barwidth = unit(0.01,"npc")))+
+  coord_flip()+
+  scale_x_continuous(
+    expand = c(0,0),
+    breaks = plot_data$order,
+    labels = plot_data$ID
+  )+
+  theme_minimal()+
+  theme(legend.position = "right",
+      axis.title.y = element_blank())
+
+
+
+```
+
+## Only differentially expressed genes
+
+```{r gsea_diff_plots,include=TRUE,fig.width=9,fig.height=8}
+plot_data = gsea %>%
+  dplyr::select(cell,gsea_diff_res) %>% 
+  mutate(
+    gsea_diff_res = map(gsea_diff_res,arrange,NES)
+  ) %>%
+  unnest() %>% 
+  mutate(
+    order = row_number()
+  )
+
+
+plot_data %>% 
+  ggplot(
+    aes(order,NES,fill = pvalue)
+  )+
+  geom_bar(stat = "identity")+
+  facet_grid( cell ~ .,scales = "free",space = "free")+
+  scale_fill_gradientn(colours = pal,
+                        guide = guide_colourbar(title = NULL,
+                        barheight = unit(0.8,"npc"),
+                        barwidth = unit(0.01,"npc")))+
+  coord_flip()+
+  scale_x_continuous(
+    expand = c(0,0),
+    breaks = plot_data$order,
+    labels = plot_data$ID
+  )+
+  theme_minimal()+
+  theme(legend.position = "right",
+      axis.title.y = element_blank())
+
+
+```
+
+## Further exploration
+
+
+
+
+
+
+
