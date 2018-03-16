@@ -107,7 +107,7 @@ a. Take the genes that are below the orange line. Those are the genes with the h
 
 b. Take the genes in the data cloud around the blue line. The genes that are differentially expressed are not going to ocurr due to the read imbalance in the treatment (i.e. the bias we had been dealing with), but the genes that are on the top of the line are more likely to not be important, as those are genes with the lowest TPM.
 
-I am going to focus on __a__ as it seems more conservative and try the mean ranking, as the median appears to shrink everything and the quantile seems to behave similarly to the mean. 
+I am going to focus on __a)__ as it seems more conservative and try the mean ranking, as the median appears to shrink everything and the quantile seems to behave similarly to the mean. 
 
 # Differentially expresed genes under this filter
 
@@ -299,5 +299,53 @@ plot_data %>%
 
 ```
 
-## Further exploration
+## Further exploration of pathways obtained with DE genes
+
+A lot of the pathways coincide, hence I am going to focus on the ones obtained when using the DE genes explicitly.
+
+```{r explo,include=TRUE,fig.height=4,fig.width=12,echo=FALSE,warning=FALSE,message=FALSE,results='hide'}
+
+pathways = gsea %>% 
+  dplyr::select(cell,gsea_diff_res) %>% 
+  unnest() %>% 
+  dplyr::select(cell,ID,core_enrichment) %>% 
+  mutate(
+    core_enrichment = map(core_enrichment, str_split,"/") %>% 
+      map(unlist)
+  ) %>% 
+  dplyr::select(-cell) %>% 
+  nest(-ID) %>% 
+  mutate(
+    core_enrichment = map(data,pull,core_enrichment) %>% 
+      map(unlist) %>% 
+      map(unique)
+  )
+
+diff_genes = gsea %>% 
+  dplyr::select(cell,results) %>% 
+  unnest() %>% 
+  dplyr::select(cell,symbol,log2FoldChange) %>% 
+  spread(cell,log2FoldChange) %>% 
+  filter(!is.na(EBV) & !is.na(NOKS))
+
+pathways = pathways %>% 
+  dplyr::select(-data) %>% 
+  mutate(
+    log2fc = map(core_enrichment, ~ filter(diff_genes, symbol %in% .x )),
+    log2fc = map(log2fc,~ gather(.,cell,log2FC,-symbol))
+  )
+
+map2(pathways$log2fc,pathways$ID, 
+     ~ .x %>% 
+       ggplot(aes(reorder(symbol,-log2FC),log2FC,colour = cell))+
+       geom_point()+
+       theme(
+         axis.text.x = element_text(angle = 90,hjust = 1,vjust = .5 ) )+
+       scale_color_tech("google")+
+       xlab("gene")+
+       ggtitle(.y))
+
+```
+
+
 
