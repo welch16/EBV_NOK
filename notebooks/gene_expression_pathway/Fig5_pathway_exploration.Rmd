@@ -295,6 +295,53 @@ plot_data %>%
 
 ## Further exploration
 
+A lot of the pathways coincide, hence I am going to focus on the ones obtained when using the DE genes explicitly.
+
+
+```{r explo,include=TRUE,fig.height=4,fig.width=12,echo=FALSE,warning=FALSE,message=FALSE,results='hide'}
+
+pathways = gsea %>% 
+  dplyr::select(cell,gsea_diff_res) %>% 
+  unnest() %>% 
+  dplyr::select(cell,ID,core_enrichment) %>% 
+  mutate(
+    core_enrichment = map(core_enrichment, str_split,"/") %>% 
+      map(unlist)
+  ) %>% 
+  dplyr::select(-cell) %>% 
+  nest(-ID) %>% 
+  mutate(
+    core_enrichment = map(data,pull,core_enrichment) %>% 
+      map(unlist) %>% 
+      map(unique)
+  )
+
+diff_genes = gsea %>% 
+  dplyr::select(cell,results) %>% 
+  unnest() %>% 
+  dplyr::select(cell,symbol,log2FoldChange) %>% 
+  spread(cell,log2FoldChange) %>% 
+  filter(!is.na(EBV) & !is.na(NOKS) & !is.na(dRdZ))
+
+pathways = pathways %>% 
+  dplyr::select(-data) %>% 
+  mutate(
+    log2fc = map(core_enrichment, ~ filter(diff_genes, symbol %in% .x )),
+    log2fc = map(log2fc,~ gather(.,cell,log2FC,-symbol))
+  )
+
+map2(pathways$log2fc,pathways$ID, 
+     ~ .x %>% 
+       ggplot(aes(reorder(symbol,-log2FC),log2FC,colour = cell))+
+       geom_point()+
+       theme(
+         axis.text.x = element_text(angle = 90,hjust = 1,vjust = .5 ) )+
+       scale_color_tech("google")+
+       xlab("gene")+
+       ggtitle(.y))
+
+```
+
 
 
 
