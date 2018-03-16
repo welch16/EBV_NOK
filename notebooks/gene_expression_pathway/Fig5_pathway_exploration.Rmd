@@ -1,6 +1,8 @@
 ---
 title: "Pathway analysis - Fig5"
 output: 
+  pdf_document:
+    toc: yes
   html_document:
     toc: yes
     theme: simplex
@@ -298,7 +300,7 @@ plot_data %>%
 A lot of the pathways coincide, hence I am going to focus on the ones obtained when using the DE genes explicitly.
 
 
-```{r explo,include=TRUE,fig.height=4,fig.width=12,echo=FALSE,warning=FALSE,message=FALSE,results='hide'}
+```{r log2fc_pathway,include=TRUE,fig.height=4,fig.width=12,echo=FALSE,warning=FALSE,message=FALSE,results='hide'}
 
 pathways = gsea %>% 
   dplyr::select(cell,gsea_diff_res) %>% 
