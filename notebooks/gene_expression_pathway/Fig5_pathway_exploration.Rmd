@@ -50,6 +50,7 @@ knitr::opts_chunk$set(eval = TRUE,
 
 load(here("apps/Fig5_dashboard/fig5data.RData"))
 
+DE_results = diff_genes
 
 ```
 

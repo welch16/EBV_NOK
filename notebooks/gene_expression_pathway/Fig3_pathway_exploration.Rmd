@@ -1,11 +1,11 @@
 ---
 title: "Pathway analysis - Fig5"
 output: 
+  pdf_document:
+    toc: yes
   html_document:
     toc: yes
     theme: simplex
-  pdf_document:
-    toc: yes
 ---
 
 # Objective
@@ -54,6 +54,8 @@ diff_genes = tribble(
   "EBV", diff_genes_EBV,
   "NOKS", diff_genes_NOKS
 )
+
+DE_results = diff_genes
 
 rm(diff_genes_EBV,diff_genes_NOKS)
 
