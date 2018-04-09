@@ -1,11 +1,11 @@
 ---
 title: "Both datasets exploratory"
 output: 
-  pdf_document:
-    toc: yes
   html_document:
     toc: yes
     theme: simplex
+  pdf_document:
+    toc: yes
 ---
 
 # Objective
@@ -38,7 +38,7 @@ library(clusterProfiler)
 pal = viridis(1e3, option = "D")
 
 ## parameters
-thr = .5
+thr = 1
 fdr = .01
 
 theme_set(theme_minimal() + 
@@ -413,9 +413,9 @@ pathways = pathways %>%
       map(dplyr::select,-batch) %>% 
       map(spread,cell,log2FC),
     EBV = map_dbl(new_batch_summary,
-                       ~ norm(as.matrix(pull(.,dRdZ) - pull(.,EBV)  ))),
+                       ~ norm(as.matrix(pull(.,dRdZ) - pull(.,EBV)))^2 / length(pull(.,EBV))) ,
     NOKS = map_dbl(new_batch_summary,
-                        ~ norm(as.matrix(pull(.,dRdZ) - pull(.,NOKS)))),
+                        ~ norm(as.matrix(pull(.,dRdZ) - pull(.,NOKS)))^2 / length(pull(.,NOKS))),
     dRdZ = 0
   )
 
@@ -434,9 +434,7 @@ pathways %>%
   geom_col(position = "dodge")+
   coord_flip()+
   xlab("ID")+
-  theme(
-    axis.title.x = element_blank()
-  )+
+  ylab("Mean distance to log2FC dRdZ")+
   scale_fill_tech("google")
 
 ```
@@ -480,9 +478,7 @@ pathways %>%
   geom_col(position = "dodge")+
   coord_flip()+
   xlab("ID")+
-  theme(
-    axis.title.x = element_blank()
-  )+
+  ylab("Mean distance to log2FC dRdZ")+
   scale_fill_tech("google")
 
 ```
