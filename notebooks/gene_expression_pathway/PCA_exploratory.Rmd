@@ -1,0 +1,147 @@
+---
+title: "PCA analysis exploratory"
+author: "Rene Welch"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    theme: simplex
+---
+
+```{r load,include=FALSE,echo=FALSE,eval=TRUE}
+library(tidyverse)
+library(here)
+library(viridis)
+library(ggtech)
+library(hexbin)
+library(gridExtra)
+library(forcats)
+library(scales)
+library(knitr)
+library(ggrepel)
+library(ggjoy)
+library(clusterProfiler)
+pal = viridis(1e3, option = "D")
+
+## parameters
+thr = 1
+fdr = .01
+
+theme_set(theme_minimal() + 
+            theme(legend.position = "top",
+                  axis.text = element_text(size = 8),
+                  axis.title = element_text(size = 12)))
+
+knitr::opts_chunk$set(eval = TRUE,
+                      echo = FALSE,
+                      include = TRUE,
+                      warning = FALSE,
+                      message = FALSE
+                    )
+
+load2env = function(file,env = new.env()){load(file,envir = env); env}
+fig3 = load2env(here("apps/Fig3_dashboad/fig3data.RData"))
+fig5 = load2env(here("apps/Fig5_dashboard/fig5data.RData"))
+
+fig3$alignment = fig3$alignment %>% 
+  mutate(
+    treat = if_else(treat == "None","none","MC") %>% 
+      factor(levels = c("MC","none")),
+    cell = if_else(cell == "NOKS","NOKS","EBV"),
+    cell = factor(cell,levels = c("EBV","NOKS")),
+    condition = interaction(cell,treat) %>% 
+      fct_relevel("EBV.MC","EBV.none","NOKS.MC","NOKS.none"))
+
+fig5$alignment = fig5$alignment %>% 
+  dplyr::rename(treat = treatment,
+                replicate = rep) %>% 
+  mutate(
+    replicate = paste0("rep",replicate),
+    treat = if_else(treat == "methyl","MC","none") %>% 
+      factor(levels = c("MC","none")),
+    cell = factor(cell,levels = c("EBV","NOKS","dRdZ")),
+    condition = interaction(cell,treat) %>% 
+      fct_relevel("EBV.MC","EBV.none","NOKS.MC","NOKS.none")
+  )
+
+rowVars <- function (x,na.rm = TRUE)
+{
+    sqr = function(x) x * x
+    n = rowSums(!is.na(x))
+    n[n <= 1] = NA
+    return(rowSums(sqr(x - rowMeans(x,na.rm = na.rm)), na.rm = na.rm)/(n - 1))
+}
+
+biplot = function(env,cols = NULL,ntop = 500,x = 1,y = 2)
+{
+  rl = pluck(env,"rlogmat")  
+  variances = rowVars(rl)  
+
+  to_select = order(variances,decreasing = TRUE)[seq_len(min(ntop,length(variances)))]
+  if(is.null(cols)){
+    cols = colnames(rl)
+  }
+  pca = prcomp(t(rl[to_select,cols]))
+  percentVar = pca$sdev^2/sum(pca$sdev^2)  
+
+  plot_data = pluck(env,"alignment") %>% 
+    filter(file %in% cols) %>% 
+    bind_cols(
+      as.data.frame(pca$x) %>% 
+        as_tibble()
+    ) 
+  
+  plot_data %>% 
+    ggplot(aes_string(paste0("PC",x) ,
+                      paste0("PC",y),colour = "condition"))+
+    geom_point()+
+    xlab(paste0("PC",x,": ",round(percentVar[x] * 100), "% variance"))+
+    ylab(paste0("PC",y,": ",round(percentVar[y] * 100), "% variance"))+
+    scale_color_brewer(palette = "Dark2",name = "")+    
+    geom_label_repel(aes(label = replicate),size = 4,
+                     show.legend = FALSE)+
+    coord_fixed()
+
+}
+
+nt = 1000
+
+```
+
+# PCA analysis old sample
+
+```{r pca1,include=TRUE}
+
+biplot(fig3,ntop = nt,x = 1,y = 2)
+biplot(fig3,ntop = nt,x = 1,y = 3)
+biplot(fig3,ntop = nt,x = 2,y = 3)
+
+```
+
+# PCA sample new sample
+
+```{r pca2,include=TRUE}
+
+biplot(fig5,ntop = nt,x = 1,y = 2)
+biplot(fig5,ntop = nt,x = 1,y = 3)
+biplot(fig5,ntop = nt,x = 2,y = 3)
+
+```
+
+## New sample without dRdZ
+
+```{r pca3,include=TRUE}
+
+cols = fig5$alignment %>% 
+  filter(cell != "dRdZ") %>% 
+  pull(file)
+
+biplot(fig5,cols = cols,ntop = nt,x = 1,y = 2)
+biplot(fig5,cols = cols,ntop = nt,x = 1,y = 3)
+biplot(fig5,cols = cols,ntop = nt,x = 2,y = 3)
+
+
+```
+
+
