@@ -20,6 +20,7 @@ library(forcats)
 library(scales)
 library(knitr)
 library(ggrepel)
+library(pheatmap)
 library(ggjoy)
 library(clusterProfiler)
 pal = viridis(1e3, option = "D")
@@ -86,7 +87,7 @@ biplot = function(env,cols = NULL,ntop = 500,x = 1,y = 2)
   percentVar = pca$sdev^2/sum(pca$sdev^2)  
 
   plot_data = pluck(env,"alignment") %>% 
-    filter(file %in% cols) %>% 
+    dplyr::filter(file %in% cols) %>% 
     bind_cols(
       as.data.frame(pca$x) %>% 
         as_tibble()
@@ -134,7 +135,7 @@ biplot(fig5,ntop = nt,x = 2,y = 3)
 ```{r pca3,include=TRUE}
 
 cols = fig5$alignment %>% 
-  filter(cell != "dRdZ") %>% 
+  dplyr::filter(cell != "dRdZ") %>% 
   pull(file)
 
 biplot(fig5,cols = cols,ntop = nt,x = 1,y = 2)
@@ -144,4 +145,97 @@ biplot(fig5,cols = cols,ntop = nt,x = 2,y = 3)
 
 ```
 
+# Correlation matrices
 
+## Old sample
+
+```{r corr_fun,include=FALSE,eval=TRUE}
+
+quantile_breaks <- function(xs, n = 10,xmin = .4) {
+  
+  breaks <- quantile(xs, probs = seq(0, 1, length.out = n))
+  breaks <- breaks[!duplicated(breaks)]
+  if(!any(breaks < xmin)){
+    breaks = c(xmin,breaks)
+  }
+  breaks
+}
+
+corr_matrix = function(env,cols = NULL,ntop = 500,unit = "rlog")
+{
+  if(unit == "rlog"){
+    rl = pluck(env,"rlogmat")  
+  }else if(unit == "tpm"){
+    rl = pluck(env,"rsem_data") %>% 
+      dplyr::select(file,rsem) %>% 
+      unnest() %>% 
+      dplyr::select(gene_id,file,TPM) %>% 
+      spread(file,TPM) %>% 
+      as.data.frame() %>% 
+      tibble::column_to_rownames("gene_id") %>% 
+      as.matrix()
+  }
+  variances = rowVars(rl)
+  to_select = order(variances,decreasing = TRUE)[seq_len(min(ntop,length(variances)))]
+  if(is.null(cols)){
+    cols = colnames(rl)
+  }
+  
+  mat = rl[to_select,cols]
+  mat_cor = cor(mat)
+
+  annots = env %>% 
+    pluck("alignment") %>% 
+    mutate(
+      ff = paste(as.character(condition),
+                 replicate,sep = "-")
+    ) %>% 
+    dplyr::filter(file %in% cols) %>% 
+    dplyr::select(condition,ff)
+  nms = annots %>% pull(ff)
+
+  annots = annots %>%
+    as.data.frame() %>% 
+    tibble::column_to_rownames("ff")
+  
+  rownames(mat_cor) <- colnames(mat_cor) <- nms
+  
+  lo = 11
+  pal = brewer_pal(palette = "RdYlBu",direction = -1)(lo)
+  
+  nconds = pull(annots,condition) %>% levels() %>% length()
+  
+  annot_colors = list(
+    condition = brewer_pal(palette = "Dark2")(nconds) %>% 
+      set_names(
+        pull(annots,condition) %>% levels()
+      )
+  )
+  
+  
+  pheatmap(mat_cor,
+           color = pal,
+           breaks = seq(.4,1,length.out = lo),#quantile_breaks(mat_cor, n = lo),
+           annotation_row = annots,
+           annotation_col = annots,
+           annotation_colors = annot_colors,
+           cluster_rows = FALSE,
+           cluster_cols = TRUE)  
+}
+
+
+```
+
+
+```{r, include=TRUE,fig.width=7}
+corr_matrix(fig3,ntop = nt)
+corr_matrix(fig3,ntop = nt,unit = "tpm")
+```
+
+
+## New sample
+
+```{r, include=TRUE,fig.width=7}
+corr_matrix(fig5,ntop = nt)
+corr_matrix(fig5,ntop = nt,unit = "tpm")
+```
