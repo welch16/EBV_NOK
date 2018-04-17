@@ -2,11 +2,11 @@
 title: "PCA analysis exploratory"
 author: "Rene Welch"
 output:
-  pdf_document:
-    toc: yes
   html_document:
     toc: yes
     theme: simplex
+  pdf_document:
+    toc: yes
 ---
 
 ```{r load,include=FALSE,echo=FALSE,eval=TRUE}
@@ -219,7 +219,7 @@ corr_matrix = function(env,cols = NULL,ntop = 500,unit = "rlog")
            annotation_row = annots,
            annotation_col = annots,
            annotation_colors = annot_colors,
-           cluster_rows = FALSE,
+           cluster_rows = TRUE,
            cluster_cols = TRUE)  
 }
 
