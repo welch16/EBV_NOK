@@ -1,0 +1,372 @@
+---
+title: "Comparison respect to NOKS, conditional on treatment"
+output:
+   html_document:
+    toc: yes
+    theme: simplex
+---
+
+# Intro
+
+Mark made this analysis under a different approach. For the analysis, he compared the log2FC of the EBV and dRdZ expression normalized by NOKS. I think that approach would be equivalent to make interaction contrasts with a fixed treatment. Hence, we are going to:
+
+1. Perform contrasts of EBV and dRdZ against NOKS, with and without treatment.
+
+2. Using all the genes, perform pathway analysis using GSEA
+
+3. Compare the log2FC (calculated with the `rlog` matrices), of EBV and dRdZ normalized by NOKS.
+
+# Differential expression analysis
+
+```{r load,include=FALSE,echo=FALSE,eval=TRUE}
+library(magrittr)
+library(tidyverse)
+library(here)
+library(viridis)
+library(ggtech)
+library(hexbin)
+library(clusterProfiler)
+library(grid)
+library(gridExtra)
+library(scales)
+library(knitr)
+library(DESeq2)
+
+pal = viridis(1e3, option = "D")
+
+theme_set(theme_bw() + 
+            theme(legend.position = "top",
+                  axis.text = element_text(size = 14),
+                  axis.title = element_text(size = 16),
+                  legend.title = element_text(size = 16),
+                  legend.text = element_text(size = 14)))
+
+knitr::opts_chunk$set(eval = TRUE,
+                      echo = FALSE,
+                    include = TRUE,
+                    warning = FALSE,
+                    message = FALSE)
+
+thr = 20
+```
+
+First, we used `DESeq2` to estimate a signal-to-noise measure for the genes that are differentially expressed between EBV/dRdZ Vs. NOKS cells conditional on a treatment. It is expected that if the expression patterns are going to differ when conditioning by the methyl treatment or its absence. It is worth mentioning, that we removed from the sample the genes that have $<`r thr`$ reads accumulated across all samples.
+
+```{r diff_expression_analyis, cache=TRUE, include=FALSE}
+rsem_dr = here("data/RSEM/hg19/Sept17")
+align_dr = here("manuscript/logs/Sept17")
+
+stri_subset = function(string,pattern)string[negate(str_detect)(string,pattern)]
+
+alignment = align_dr %>% 
+  list.files(full.names = TRUE) %>% 
+  stri_subset(".sh") %>% 
+  tibble(
+    file = .
+  ) %>% 
+  mutate(
+    stats = map(file,read_tsv,col_names = FALSE,progress = FALSE))
+
+parse_stats = function(stats)
+{
+  stats %>% 
+    filter( 
+      str_detect(X1,"total") | str_detect(X1,"mapped")) %>% 
+    filter(
+      negate(str_detect)(X1,"mate")
+    ) %>% 
+    mutate(
+      type = if_else(str_detect(X1,"total"),"total","aligned"),
+      reads = str_split(X1," ") %>% 
+        map_chr( ~ .[1]) %>% 
+        as.numeric()) %>% 
+    select(-X1) 
+}
+
+alignment %<>% 
+  mutate(
+    stats = map(stats,parse_stats),
+    file = basename(file)
+  ) %>% 
+  unnest() %>% 
+  spread(type,reads) %>% 
+  mutate(
+    perc = aligned / total,
+    file = str_replace(file,".logs","")
+  ) %>% 
+  mutate(
+    treatment = file %>% 
+      str_detect("methyl") %>% 
+      if_else(
+        "methyl","none"
+      ),
+    cell = case_when(
+          str_detect(file,"clone") ~ "dRdZ",
+          str_detect(file,"akata") ~ "EBV" ,
+          TRUE ~ "NOKS"),
+    rep = file %>% 
+      str_split("-") %>% 
+      map_chr( ~ .[length(.)]) %>% 
+      str_replace("clone","") %>% 
+      str_replace("rep","") %>% 
+      as.integer())
+
+
+rsem_data = tibble(
+  file = list.files(rsem_dr,full.names = TRUE)) %>% 
+  mutate(
+    rsem = map(file,read_tsv)
+  ) %>% 
+  mutate(
+    file = basename(file) %>% 
+      str_replace(".genes.results","")
+  ) %>% 
+  inner_join(
+    select_if(alignment,negate(is.list)), by ="file"
+  ) %>% 
+  select(-aligned,-total,-perc)
+
+## remove contaminated samples clone2 and clone4
+alignment %<>% 
+  filter(!( cell == "dRdZ" & rep %in% c(2,4) ))
+
+rsem_data %<>% 
+  filter(!( cell == "dRdZ" & rep %in% c(2,4) ))
+
+
+as_matrix <- function(x)
+{
+  x %>% 
+    as.data.frame() %>% 
+    tibble::remove_rownames() %>% 
+    tibble::column_to_rownames("gene_id") %>% 
+    as.matrix()
+}
+
+count_matrix = rsem_data %>% 
+  select(file,rsem) %>% 
+  unnest() %>% 
+  select(file,gene_id,expected_count) %>% 
+  mutate(
+    expected_count = floor(expected_count)
+  ) %>% 
+  spread(file,expected_count) %>% 
+  as_matrix()
+
+coldata = rsem_data %>% 
+  select(file,cell,treatment) %>% 
+  mutate(interac = paste(cell,treatment, sep = ".")) %>% 
+  as.data.frame() %>% 
+  tibble::remove_rownames() %>% 
+  tibble::column_to_rownames("file")
+
+
+## remove genes with low read counts, filtered genes with no reads but probably can 
+## filter genes with low expression
+
+deseq = DESeqDataSetFromMatrix(
+  count_matrix,colData = coldata,
+  design = ~ interac
+)
+
+deseq = deseq[ rowSums(assay(deseq) ) > thr,]
+deseq = DESeq(deseq)
+
+
+do_contrast = function(deseq,contrast)
+{
+  results(deseq,
+          cooksCutoff = FALSE,
+          contrast = contrast,
+          tidy = TRUE) %>% 
+    as_tibble() %>% 
+    dplyr::rename(
+      gene_id = row
+    ) %>% 
+    mutate(
+      log10pval = -log10(pvalue)
+    )
+  
+}
+
+## The contrast is EBV.none vs NOKS.none
+
+diff_genes = tribble(
+  ~ treat,~ test , ~ contrast ,
+  "methyl", "EBV_vs_NOKS",  c("interac","EBV.methyl","NOKS.methyl"),
+  "methyl", "dRdZ_vs_NOKS", c("interac","dRdZ.methyl", "NOKS.methyl"),
+  "none", "EBV_vs_NOKS", c("interac","EBV.none","NOKS.none"),
+  "none", "dRdZ_vs_NOKS",c("interac","dRdZ.none","NOKS.none")
+) %>% 
+  mutate(
+    results = map(contrast, ~ do_contrast(deseq,.))
+  )
+
+common_genes = diff_genes %>% 
+  select(results) %>% 
+  unnest() %>% 
+  bind_rows() %>% 
+  group_by(gene_id) %>% 
+  summarize(
+    n = n()
+  ) %>% 
+  filter(n == 4) %>% 
+  ungroup() %>% 
+  select(gene_id)
+
+rsem_data = rsem_data %>% 
+  mutate(
+    rsem = map(rsem , inner_join,common_genes,by = "gene_id")
+  )
+
+rlog = rlog(deseq)  
+
+rlogmat = rlog %>% 
+  assay() %>% 
+  as.matrix()
+
+rm(coldata,common_genes,count_matrix,rlog)
+```
+
+The figure below exhibits the p.value distribution for the 4 contrasts that we are testing. Even though, we are not going to use multiple test correction it is good to know that these tests satisfy the assumptions. I gave a quick look to Biostars and found two posts: [1](https://www.biostars.org/p/42219/) and [2](https://www.biostars.org/p/15101/#15103), and it seems that there is not a pre-defined way when using a set of genes for the pathway analysis (either all genes or only the diff. expressed ones).
+
+```{r histogram, fig.align="center", fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
+
+diff_genes %>% 
+  select(treat,test,results) %>% 
+  unnest() %>% 
+  ggplot(
+    aes(pvalue)
+  )+geom_histogram(bins = 51,boundary= 0,fill = "lightblue",
+                   colour = "navyblue")+
+  facet_grid(
+    rev(treat) ~ test
+  )+
+  scale_x_continuous(breaks = c(0,.1,.25,.5,.75,1),
+                     labels = c("0","0.1","0.25","0.5","0.75","1"))
+
+```
+
+```{r rank_plot,include=FALSE}
+rank_plot <- function(treat , rlogmat,alignment,cells )
+{
+  rlog_tibble = rlogmat %>% 
+    as.data.frame() %>% 
+    rownames_to_column(var ="gene_id") %>% 
+    as_tibble() %>% 
+    gather(file,rlog,-gene_id)
+  
+  samples = alignment %>% 
+    filter(treatment == treat) %>% 
+    select_if(negate(is.numeric)) %>% 
+    filter(cell %in% cells)
+  
+  rlog_tibble %<>% 
+    right_join(samples,by = "file") %>% 
+    select(-treatment,-file) %>% 
+    filter(!is.na(rlog)) %>% 
+    group_by(gene_id,cell) %>% 
+    summarize(
+      rlog = mean(rlog)
+    )  %>% 
+    ungroup() %>% 
+    spread(cell,rlog) %>% 
+    mutate_if(is.numeric,funs(percent_rank(desc(.))))
+  
+  rlog_tibble %>% 
+    ggplot( aes_string(cells[1],cells[2])  )+
+    stat_binhex(bins = 51)+
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                                                 barheight = unit(0.7,"npc"),
+                                                 barwidth = unit(0.01,"npc")))+
+    theme(legend.position = "right")+
+    ylab(paste("rank:",cells[1]))+
+    xlab(paste("rank:",cells[2]))
+    
+}
+
+```
+
+
+## Rank analysis
+
+### With MC treatment
+
+The figure below shows a decreasing ranking of the average `rlog` of the samples of a given cell and the `methyl` treatment.
+
+```{r rank_plot_methyl,include=TRUE,fig.width=8,fig.height=3,fig.align="center"}
+
+grid.arrange(
+  rank_plot("methyl",rlogmat,alignment,c("NOKS","EBV")),
+  rank_plot("methyl",rlogmat,alignment,c("NOKS","dRdZ")),nrow = 1)
+
+```
+
+The closer the point is to the zero, is mean that the gene in question is more expressed. It appears that the yellow/green diagonal band is a bit wider for the figure in the right. This would mean, that potentially there are more genes being differentially expressed in the dRdZ contrast than in the EBV one. To review if this was true, for both contrast we count the amount of genes that are differentially expressed in a given contrast:
+
+### Without treatment 
+
+This analysis is analogous to the previous one. The only difference is that in this one, we are conditioning respect to the `none` treatment instead of the `methyl` one.
+
+```{r rank_plot_none,include=TRUE,fig.width=8,fig.height=3,fig.align="center"}
+
+grid.arrange(
+  rank_plot("none",rlogmat,alignment,c("NOKS","EBV")),
+  rank_plot("none",rlogmat,alignment,c("NOKS","dRdZ")),nrow = 1)
+
+```
+
+## Joint analysis
+
+```{r diff_genes_counts,include=FALSE}
+
+fdrs = seq(1,5,by = 1) %>% {10^{-.}}
+
+diff_genes %<>% 
+  mutate(
+    ngenes = map(results, .f = function(x){
+      tibble(  fdrs ) %>% 
+        mutate(
+          ngenes = map_int(fdrs , ~filter(x,padj <= .) %>% nrow())
+        )}))
+
+```
+
+The figure below shows that when counting the number of genes that are differentially expressed, the increment between the dRdZ and EBV contrasts is higher, when the `MC` treatment is applied. 
+
+```{r diff_genes_plot,fig.width=7,fig.align="center"}
+
+diff_genes %>% 
+  select(test,ngenes,treat) %>% 
+  unnest() %>% 
+  ggplot(aes(factor(fdrs),ngenes,fill = test))+
+  geom_col(position = "dodge")+
+  facet_grid(treat ~ .)+
+  scale_fill_manual(values = c("#3595D6", "#92C746"),name = "")+
+  xlab("fdr")+
+  ylab("amount of genes with \n padj <= fdr")+
+  scale_x_discrete(
+    breaks = fdrs,
+    labels = math_format({10^-.x})(seq(1,5,by = 1))
+  )
+```
+
+
+
+# Pathway analysis
+
+## All genes
+
+## Differentially expressed genes
+
+
+# log2FC analysis
+
+## Most expressed genes
+
+## Selected pathways
+
+
+
