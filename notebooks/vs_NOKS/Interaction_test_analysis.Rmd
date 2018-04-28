@@ -39,7 +39,8 @@ theme_set(theme_bw() +
                   axis.text = element_text(size = 14),
                   axis.title = element_text(size = 16),
                   legend.title = element_text(size = 16),
-                  legend.text = element_text(size = 14)))
+                  legend.text = element_text(size = 14),
+                  strip.text = element_text(size = 16)))
 
 knitr::opts_chunk$set(eval = TRUE,
                       echo = FALSE,
@@ -353,9 +354,103 @@ diff_genes %>%
   )
 ```
 
+```{r log2fc_func, include=FALSE}
 
+log2fc_plot <- function(genes,diff_genes,up = TRUE)
+{
+  log2fc_tibble = diff_genes %>% 
+    select(treat,test,results) %>% 
+    unnest()
+  
+  log2fc_tibble %<>% 
+    filter(gene_id %in% genes) %>% 
+    mutate(gene_id = str_split(gene_id,"_") %>% map_chr(~.[2]))
+  
+  if(up){
+    log2fc_tibble %<>% 
+      ggplot(aes(reorder(gene_id,log2FoldChange),log2FoldChange,fill = test))
+  }else{
+    log2fc_tibble %<>% 
+      ggplot(aes(reorder(gene_id,-log2FoldChange),log2FoldChange,fill = test))
+  }
+  log2fc_tibble +
+    geom_col(position = "dodge")+
+    coord_flip()+
+    facet_grid( ~ treat )+
+    scale_fill_manual(values = c("#3595D6", "#92C746"),name = "")+
+    geom_hline(yintercept = 0,linetype = 2)+
+    theme(axis.title.y = element_blank())+
+    ylab(expression(log[2]("Fold Change")))
+    
+}
+
+top = 20
+
+```
+
+Since more gene are expressed in the mutant type EBV-dRdZ than in the EBV cell lines when a treatment is applied, then we examine the degree to which the most upregulated (downregulated) genes are expressed by comparing the top (bottom) `r top` genes with the highest (lowest) log2 fold change (dRdZ/EBV divided by NOKS): 
+
+
+```{r fc_plots,include=TRUE,fig.width=10,fig.height=6,fig.align="center",out.width="100%"}
+
+rlog_tibble = rlogmat %>% 
+  as.data.frame() %>% 
+  rownames_to_column("gene_id") %>% 
+  as_tibble() %>% 
+  gather(file,rlog,-gene_id) %>% 
+  left_join(
+    alignment %>% select_if(negate(is.numeric)),by ="file"
+  ) %>% 
+  select(-file) %>% 
+  group_by(treatment,cell,gene_id) %>% 
+  summarize(rlog = mean(rlog)) %>% 
+  ungroup()
+
+up_genes = rlog_tibble %>% 
+  filter(treatment == "methyl") %>% 
+  spread(cell,rlog) %>% 
+  mutate_if(is.numeric,funs(./ NOKS)) %>% 
+  top_n(top,dRdZ) %>% 
+  arrange(desc(dRdZ)) %>% 
+  pluck("gene_id")
+
+down_genes = rlog_tibble %>% 
+  filter(treatment == "methyl") %>% 
+  spread(cell,rlog) %>% 
+  mutate_if(is.numeric,funs(./ NOKS)) %>% 
+  top_n(top,-dRdZ) %>% 
+  arrange(dRdZ) %>% 
+  pluck("gene_id")
+
+
+fc_plot_up = log2fc_plot(up_genes,diff_genes)+
+  ggtitle("Upregulated")
+
+fc_plot_down = log2fc_plot(down_genes, diff_genes,FALSE)+
+  ggtitle("Downregulated")
+
+grid.arrange(fc_plot_up,fc_plot_down,nrow = 1)
+
+```
 
 # Pathway analysis
+
+Before doing the pathway analysis, we double-checked the gene names by using `clusterProfiler::bitr` function which in this case converts from the gene symbol to ENSEMBL and ENTREZ ids. I am thinking that the version of the transcriptome that we used may be old, and that could be impacting the pathway analysis:
+
+```{r,include=TRUE,echo=TRUE,eval=TRUE}
+
+bitr_conversion = diff_genes$results[[1]] %>% 
+  separate(gene_id,into = c("ensembl","symbol"),sep = "_",extra = "drop") %>% 
+  pull(symbol) %>% 
+  bitr( fromType = "SYMBOL",toType = c("ENTREZID","ENSEMBL"),
+        OrgDb = "org.Hs.eg.db") %>% as_tibble() %>% 
+  nest(-SYMBOL) %>% 
+  filter(map_int(data,nrow) == 1) %>% unnest()
+
+```
+
+In total, we are removing `r percent(nrow(diff_genes$results[[1]]) / nrow(bitr_conversion) -1)` of the `r nrow(diff_genes$results[[1]])` genes used in the differential expression analysis.
+
 
 ## All genes
 
