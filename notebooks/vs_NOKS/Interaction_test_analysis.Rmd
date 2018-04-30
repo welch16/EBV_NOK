@@ -559,9 +559,11 @@ nes_plot <- function(gsea_data,gene_list  = c("all_genes_list","diff_genes_list"
                            breaks = gsea_data$order,
                            labels = gsea_data$ID
   )+
+  theme_minimal()+
   theme(legend.position = "right",
         axis.text.y = element_text(size = 10),
         axis.title.y = element_blank())
+    
 }
 
 plots_all_genes = nes_plot(diff_genes,
