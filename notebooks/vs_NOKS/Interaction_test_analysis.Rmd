@@ -16,11 +16,10 @@ Mark made this analysis under a different approach. For the analysis, he compare
 
 3. Compare the log2FC (calculated with the `rlog` matrices), of EBV and dRdZ normalized by NOKS.
 
-# Differential expression analysis
-
 ```{r load,include=FALSE,echo=FALSE,eval=TRUE}
 library(magrittr)
 library(tidyverse)
+library(ghibli)
 library(here)
 library(viridis)
 library(ggtech)
@@ -51,8 +50,6 @@ knitr::opts_chunk$set(eval = TRUE,
 
 thr = 20
 ```
-
-First, we used `DESeq2` to estimate a signal-to-noise measure for the genes that are differentially expressed between EBV/dRdZ Vs. NOKS cells conditional on a treatment. It is expected that if the expression patterns are going to differ when conditioning by the methyl treatment or its absence. It is worth mentioning, that we removed from the sample the genes that have $<`r thr`$ reads accumulated across all samples.
 
 ```{r diff_expression_analyis, cache=TRUE, include=FALSE}
 rsem_dr = here("data/RSEM/hg19/Sept17")
@@ -229,6 +226,34 @@ rlogmat = rlog %>%
 
 rm(coldata,common_genes,count_matrix,rlog)
 ```
+
+
+```{r design, include=TRUE,fig.align="center",fig.width=5}
+
+demo = alignment %>% 
+  dplyr::select(cell,treatment,rep) %>% 
+  group_by(cell,treatment) %>% 
+  summarize( n = n()) %>% 
+  ungroup()
+
+demo %>% ggplot(aes( x = 1, y = 1,fill = interaction(cell,treatment)))+
+  geom_rect(aes(xmin = .5,xmax = 1.5,ymin = .5,ymax = 1.5  ))+
+  geom_text(aes(label = paste("Reps:",n,sep = "\n"),size = 40  ))+
+  coord_fixed()+
+  facet_grid(treatment ~ cell)+
+  theme_void()+
+  theme(legend.position = "none",
+        strip.text = element_text(size = 25))+
+  scale_fill_manual(values = c(ghibli_palette("PonyoMedium",6)[4:6],
+                               ghibli_palette("PonyoLight",6)[4:6]))
+
+
+```
+
+
+# Differential expression analysis
+
+First, we used `DESeq2` to estimate a signal-to-noise measure for the genes that are differentially expressed between EBV/dRdZ Vs. NOKS cells conditional on a treatment. It is expected that if the expression patterns are going to differ when conditioning by the methyl treatment or its absence. It is worth mentioning, that we removed from the sample the genes that have $<`r thr`$ reads accumulated across all samples.
 
 The figure below exhibits the p.value distribution for the 4 contrasts that we are testing. Even though, we are not going to use multiple test correction it is good to know that these tests satisfy the assumptions. I gave a quick look to Biostars and found two posts: [1](https://www.biostars.org/p/42219/) and [2](https://www.biostars.org/p/15101/#15103), and it seems that there is not a pre-defined way when using a set of genes for the pathway analysis (either all genes or only the diff. expressed ones).
 
