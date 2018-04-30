@@ -25,6 +25,7 @@ library(here)
 library(viridis)
 library(ggtech)
 library(hexbin)
+library(rlang)
 library(clusterProfiler)
 library(grid)
 library(gridExtra)
@@ -81,7 +82,7 @@ parse_stats = function(stats)
       reads = str_split(X1," ") %>% 
         map_chr( ~ .[1]) %>% 
         as.numeric()) %>% 
-    select(-X1) 
+    dplyr::select(-X1) 
 }
 
 alignment %<>% 
@@ -125,7 +126,7 @@ rsem_data = tibble(
   inner_join(
     select_if(alignment,negate(is.list)), by ="file"
   ) %>% 
-  select(-aligned,-total,-perc)
+  dplyr::select(-aligned,-total,-perc)
 
 ## remove contaminated samples clone2 and clone4
 alignment %<>% 
@@ -145,9 +146,9 @@ as_matrix <- function(x)
 }
 
 count_matrix = rsem_data %>% 
-  select(file,rsem) %>% 
+  dplyr::select(file,rsem) %>% 
   unnest() %>% 
-  select(file,gene_id,expected_count) %>% 
+  dplyr::select(file,gene_id,expected_count) %>% 
   mutate(
     expected_count = floor(expected_count)
   ) %>% 
@@ -155,7 +156,7 @@ count_matrix = rsem_data %>%
   as_matrix()
 
 coldata = rsem_data %>% 
-  select(file,cell,treatment) %>% 
+  dplyr::select(file,cell,treatment) %>% 
   mutate(interac = paste(cell,treatment, sep = ".")) %>% 
   as.data.frame() %>% 
   tibble::remove_rownames() %>% 
@@ -204,7 +205,7 @@ diff_genes = tribble(
   )
 
 common_genes = diff_genes %>% 
-  select(results) %>% 
+  dplyr::select(results) %>% 
   unnest() %>% 
   bind_rows() %>% 
   group_by(gene_id) %>% 
@@ -213,7 +214,7 @@ common_genes = diff_genes %>%
   ) %>% 
   filter(n == 4) %>% 
   ungroup() %>% 
-  select(gene_id)
+  dplyr::select(gene_id)
 
 rsem_data = rsem_data %>% 
   mutate(
@@ -234,7 +235,7 @@ The figure below exhibits the p.value distribution for the 4 contrasts that we a
 ```{r histogram, fig.align="center", fig.height=5, fig.width=8, message=FALSE, warning=FALSE}
 
 diff_genes %>% 
-  select(treat,test,results) %>% 
+  dplyr::select(treat,test,results) %>% 
   unnest() %>% 
   ggplot(
     aes(pvalue)
@@ -264,7 +265,7 @@ rank_plot <- function(treat , rlogmat,alignment,cells )
   
   rlog_tibble %<>% 
     right_join(samples,by = "file") %>% 
-    select(-treatment,-file) %>% 
+    dplyr::select(-treatment,-file) %>% 
     filter(!is.na(rlog)) %>% 
     group_by(gene_id,cell) %>% 
     summarize(
@@ -340,7 +341,7 @@ The figure below shows that when counting the number of genes that are different
 ```{r diff_genes_plot,fig.width=7,fig.align="center"}
 
 diff_genes %>% 
-  select(test,ngenes,treat) %>% 
+  dplyr::select(test,ngenes,treat) %>% 
   unnest() %>% 
   ggplot(aes(factor(fdrs),ngenes,fill = test))+
   geom_col(position = "dodge")+
@@ -359,7 +360,7 @@ diff_genes %>%
 log2fc_plot <- function(genes,diff_genes,up = TRUE)
 {
   log2fc_tibble = diff_genes %>% 
-    select(treat,test,results) %>% 
+    dplyr::select(treat,test,results) %>% 
     unnest()
   
   log2fc_tibble %<>% 
@@ -401,7 +402,7 @@ rlog_tibble = rlogmat %>%
   left_join(
     alignment %>% select_if(negate(is.numeric)),by ="file"
   ) %>% 
-  select(-file) %>% 
+  dplyr::select(-file) %>% 
   group_by(treatment,cell,gene_id) %>% 
   summarize(rlog = mean(rlog)) %>% 
   ungroup()
@@ -435,9 +436,11 @@ grid.arrange(fc_plot_up,fc_plot_down,nrow = 1)
 
 # Pathway analysis
 
+<!--
 Before doing the pathway analysis, we double-checked the gene names by using `clusterProfiler::bitr` function which in this case converts from the gene symbol to ENSEMBL and ENTREZ ids. I am thinking that the version of the transcriptome that we used may be old, and that could be impacting the pathway analysis:
+--->
 
-```{r,include=TRUE,echo=TRUE,eval=TRUE}
+```{r,include=FALSE,echo=TRUE,eval=TRUE}
 
 bitr_conversion = diff_genes$results[[1]] %>% 
   separate(gene_id,into = c("ensembl","symbol"),sep = "_",extra = "drop") %>% 
@@ -449,19 +452,121 @@ bitr_conversion = diff_genes$results[[1]] %>%
 
 ```
 
+<!---
 In total, we are removing `r percent(nrow(diff_genes$results[[1]]) / nrow(bitr_conversion) -1)` of the `r nrow(diff_genes$results[[1]])` genes used in the differential expression analysis.
+--->
 
+```{r pathway_analysis,include=FALSE,message=FALSE,warning=FALSE}
+
+gmt_files = here::here("data/Pathway") %>% 
+  list.files(full.names = TRUE,recursive = TRUE) %>% 
+  str_subset("v6.1") %>% 
+  str_subset(".gmt") %>% 
+  str_subset("h.all") %>% 
+  set_names(
+    {
+      basename(.) %>% 
+        str_replace(".gmt","") %>% 
+        str_split("\\.") %>% 
+        map_chr( ~ .[length(.)])
+    }
+  ) %>% 
+  pluck("symbols")
+
+
+hallmark = gmt_files %>% 
+  map(read.gmt) %>% 
+  unlist(recursive = FALSE) %>% 
+  as_tibble()
+
+name <- function(.x){
+  nms = pull(.x,symbol)
+  pull(.x,stat) %>% set_names(nms)
+  
+}
+
+diff_genes %<>%
+  mutate(
+    results = map(results,separate,gene_id,into = c("ensembl","symbol"),sep = "_"))
+
+diff_genes %<>%
+  mutate(
+    all_genes_list = map(results,arrange,desc(stat) ) %>% map(name),
+    diff_genes_list = map(results,filter,padj <= .05) %>% 
+      map(arrange,desc(stat)) %>% map(name)) %>% 
+  mutate_at(vars(contains("genes_list")),
+            funs(map(.,GSEA,TERM2GENE = hallmark,verbose = FALSE) )) %>% 
+  mutate_at(vars(contains("genes_list")),
+            funs(  map(. , "result") %>% 
+                    map(as_tibble)))
+
+```
+
+```{r nes_plot,include=FALSE}
+
+nes_plot <- function(gsea_data,gene_list  = c("all_genes_list","diff_genes_list"),
+                     treatment = "none")
+{
+  gene_list = match.arg(gene_list)
+  
+  gsea_data %<>%
+    mutate(test = str_replace(test,"_vs_NOKS","")) %>% 
+    select_(.dots = c("treat","test",gene_list)) %>% 
+    dplyr::rename( res = UQ(sym(gene_list))) %>% 
+    mutate(
+      res = map(res,arrange,NES)
+      ) %>%
+      unnest() %>% 
+      mutate(
+        order = row_number()
+        )
+
+  gsea_data %>% 
+    ggplot( aes(order,NES,fill = pvalue))+
+    geom_bar(stat = "identity")+
+    facet_grid(treat +  test ~ .,scales = "free",space = "free")+
+    scale_fill_gradientn(colours = viridis::viridis(100),
+                         guide = guide_colourbar(title = NULL,
+                                                 barheight = unit(0.8,"npc"),
+                        barwidth = unit(0.01,"npc")))+
+    coord_flip()+
+    scale_x_continuous(    expand = c(0,0),
+                           breaks = gsea_data$order,
+                           labels = gsea_data$ID
+  )+
+  theme(legend.position = "right",
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_blank())
+}
+
+plots_all_genes = nes_plot(diff_genes,
+                            gene_list = "all_genes_list",treatment = "")
+plots_diff_genes = nes_plot(diff_genes,
+                            gene_list = "diff_genes_list",treatment = "")
+
+
+```
 
 ## All genes
 
-## Differentially expressed genes
+
+```{r all_genes_nes,include=TRUE,fig.width=9,fig.height=9}
+
+plots_all_genes
+
+```
 
 
-# log2FC analysis
+## Differentially expressed genes (defined by padj $\leq$ 0.05 )
 
-## Most expressed genes
+```{r diff_genes_nes,include=TRUE,fig.width=9,fig.height=5,fig.align="center"}
 
-## Selected pathways
+plots_diff_genes
+
+```
+
+
+
 
 
 
