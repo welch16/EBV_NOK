@@ -1,9 +1,11 @@
 ---
 title: "Comparison respect to NOKS, conditional on treatment"
 output:
-   html_document:
+  pdf_document:
     toc: yes
+  html_document:
     theme: simplex
+    toc: yes
 ---
 
 # Intro
@@ -25,6 +27,7 @@ library(viridis)
 library(ggtech)
 library(hexbin)
 library(rlang)
+library(rwlib)
 library(clusterProfiler)
 library(grid)
 library(gridExtra)
@@ -54,8 +57,6 @@ thr = 20
 ```{r diff_expression_analyis, cache=TRUE, include=FALSE}
 rsem_dr = here("data/RSEM/hg19/Sept17")
 align_dr = here("manuscript/logs/Sept17")
-
-stri_subset = function(string,pattern)string[negate(str_detect)(string,pattern)]
 
 alignment = align_dr %>% 
   list.files(full.names = TRUE) %>% 
@@ -483,26 +484,23 @@ In total, we are removing `r percent(nrow(diff_genes$results[[1]]) / nrow(bitr_c
 
 ```{r pathway_analysis,include=FALSE,message=FALSE,warning=FALSE}
 
-gmt_files = here::here("data/Pathway") %>% 
+gmt_files =  here::here("data/Pathway") %>% 
   list.files(full.names = TRUE,recursive = TRUE) %>% 
-  str_subset("v6.1") %>% 
-  str_subset(".gmt") %>% 
-  str_subset("h.all") %>% 
+  stri_subset("kera") %>% 
   set_names(
     {
-      basename(.) %>% 
-        str_replace(".gmt","") %>% 
-        str_split("\\.") %>% 
-        map_chr( ~ .[length(.)])
+      c("hallmark","curated")
     }
+  )
+
+gene_lists = tibble(
+ pathway_name = names(gmt_files), files = gmt_files
+) %>% 
+  mutate(
+    pathways = files %>% 
+      map(read.gmt) %>% map(as_tibble)
   ) %>% 
-  pluck("symbols")
-
-
-hallmark = gmt_files %>% 
-  map(read.gmt) %>% 
-  unlist(recursive = FALSE) %>% 
-  as_tibble()
+  dplyr::select(-files)
 
 name <- function(.x){
   nms = pull(.x,symbol)
@@ -512,24 +510,33 @@ name <- function(.x){
 
 diff_genes %<>%
   mutate(
-    results = map(results,separate,gene_id,into = c("ensembl","symbol"),sep = "_"))
-
-diff_genes %<>%
+    results = map(results,separate,gene_id,into = c("ensembl","symbol"),sep = "_")) %>% 
   mutate(
     all_genes_list = map(results,arrange,desc(stat) ) %>% map(name),
     diff_genes_list = map(results,filter,padj <= .05) %>% 
-      map(arrange,desc(stat)) %>% map(name)) %>% 
-  mutate_at(vars(contains("genes_list")),
-            funs(map(.,GSEA,TERM2GENE = hallmark,verbose = FALSE) )) %>% 
-  mutate_at(vars(contains("genes_list")),
-            funs(  map(. , "result") %>% 
+      map(arrange,desc(stat)) %>% map(name))
+
+diff_genes %<>% crossing(.,gene_lists)
+
+diff_genes %<>%
+  mutate(
+    all_genes_list_gsea = map2( all_genes_list, pathways,
+                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE)),
+    diff_genes_list_gsea = map2( diff_genes_list, pathways,
+                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE)))
+
+
+diff_genes %<>% 
+  mutate_at(vars(contains("gsea")),
+            funs( res =  map(. , "result") %>% 
                     map(as_tibble)))
 
 ```
 
 ```{r nes_plot,include=FALSE}
 
-nes_plot <- function(gsea_data,gene_list  = c("all_genes_list","diff_genes_list"),
+nes_plot <- function(gsea_data,
+                     gene_list  = c("all_genes_list_gsea_res","diff_genes_list_gsea_res"),
                      treatment = "none")
 {
   gene_list = match.arg(gene_list)
@@ -566,15 +573,22 @@ nes_plot <- function(gsea_data,gene_list  = c("all_genes_list","diff_genes_list"
     
 }
 
-plots_all_genes = nes_plot(diff_genes,
-                            gene_list = "all_genes_list",treatment = "")
-plots_diff_genes = nes_plot(diff_genes,
+plots_all_genes = nes_plot(diff_genes %>% filter(pathway_name == "hallmark"),
+                           gene_list = "all_genes_list",treatment = "")
+
+plots_diff_genes = nes_plot(diff_genes %>% filter(pathway_name == "hallmark"),
                             gene_list = "diff_genes_list",treatment = "")
+
+plots_all_genes_curated = nes_plot(diff_genes %>% filter(pathway_name == "curated"),
+                                   gene_list = "all_genes",treatment = "")
+
+plots_diff_genes_curated = nes_plot(diff_genes %>% filter(pathway_name == "curated"),
+                                    gene_list = "diff_genes",treatment = "")
 
 
 ```
 
-## All genes
+## All genes (HALLMARK pathways)
 
 
 ```{r all_genes_nes,include=TRUE,fig.width=9,fig.height=9}
@@ -584,7 +598,52 @@ plots_all_genes
 ```
 
 
-## Differentially expressed genes (defined by padj $\leq$ 0.05 )
+```{r gsea_plots,include=TRUE,warning=FALSE,fig.align='center',fig.width=7,fig.height=4,results='hide'}
+
+runningScore_comparison = function(geneSetID, gsea_tibb  ,by = c("runningScore","preranked"))
+{
+  
+  arg  = match.arg(by)
+  gsea_tibb %<>%
+    mutate(gsea_plots = map(genes_list_gsea, ~ gseaplot(., geneSetID,by = arg)) %>% 
+             map2(test , ~ .x + ylab(.y)))
+
+  
+  grid.arrange(gsea_tibb$gsea_plots[[1]],
+               gsea_tibb$gsea_plots[[2]],top = geneSetID)
+}
+
+gsea_tibb = diff_genes %>% 
+  filter(pathway_name == "hallmark") %>% 
+  filter(treat == "methyl") %>% 
+  dplyr::select(test,all_genes_list_gsea) %>% 
+  dplyr::rename(genes_list_gsea = all_genes_list_gsea)
+
+pathways_to_plot = diff_genes %>% 
+  filter(pathway_name == "hallmark") %>% 
+  filter(treat == "methyl") %>% 
+  mutate(pp  = map(all_genes_list_gsea_res, dplyr::select,ID)) %>% 
+  dplyr::select(pp) %>% unnest() %>% unique() %>% pull(ID)
+
+
+map(pathways_to_plot,runningScore_comparison,gsea_tibb,by = "runningScore")
+
+
+```
+
+
+## All genes (curated pathways)
+
+```{r all_genes_nes2,include=TRUE,fig.width=9,fig.height= 1.2}
+
+plots_all_genes_curated+
+  theme(strip.text.y = element_text(angle = 0))
+
+```
+
+- __Note:__ There are only those 3 pathways using all genes. When tried to make the same plot using differentially expressed genes didn't got anything.
+
+## Differentially expressed genes (defined by padj $\leq$ 0.05 and HALLMARK pathways)
 
 ```{r diff_genes_nes,include=TRUE,fig.width=9,fig.height=5,fig.align="center"}
 
@@ -593,7 +652,25 @@ plots_diff_genes
 ```
 
 
+```{r gsea_plots_2,include=TRUE,warning=FALSE,fig.align='center',fig.width=7,fig.height=4,results='hide'}
 
 
+gsea_tibb = diff_genes %>% 
+  filter(pathway_name == "hallmark") %>% 
+  filter(treat == "methyl") %>% 
+  dplyr::select(test,diff_genes_list_gsea) %>% 
+  dplyr::rename(genes_list_gsea = diff_genes_list_gsea)
+
+pathways_to_plot = diff_genes %>% 
+  filter(pathway_name == "hallmark") %>% 
+  filter(treat == "methyl") %>% 
+  mutate(pp  = map(diff_genes_list_gsea_res, dplyr::select,ID)) %>% 
+  dplyr::select(pp) %>% unnest() %>% unique() %>% pull(ID)
+
+
+map(pathways_to_plot,runningScore_comparison,gsea_tibb,by = "runningScore")
+
+
+```
 
 
