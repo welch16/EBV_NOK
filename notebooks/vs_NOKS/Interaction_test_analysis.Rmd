@@ -674,3 +674,10 @@ map(pathways_to_plot,runningScore_comparison,gsea_tibb,by = "runningScore")
 ```
 
 
+```{r all_genes_nes_mc,include=TRUE,fig.width=9,fig.height=7}
+nes_plot(diff_genes %>% filter(pathway_name == "hallmark" & treat == "methyl") %>% 
+           mutate(treat = if_else(treat == "methyl","MC","none")),
+         gene_list = "all_genes_list",treatment = "")
+
+```
+
