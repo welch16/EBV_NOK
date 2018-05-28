@@ -250,7 +250,7 @@ demo %>% ggplot(aes( x = 1, y = 1,fill = interaction(cell,treatment)))+
 
 # Signal to noise analysis
 
-The figure below shows the densities of the signal-to-noise meaures of the treated vs untreated contrast for all three cell lines. Clearly, all three cell lines resemble a similar pattern, with a slightly heavier tails for the NOKS case.
+The figure below shows the densities of the signal-to-noise measures of the treated vs untreated contrast for all three cell lines. Clearly, all three cell lines resemble a similar pattern, with a slightly heavier tails for the NOKS case.
 
 ```{r walds,fig.align='center',fig.width=6,fig.height=5}
 
@@ -296,6 +296,8 @@ scatters %<>% map( ~ . + stat_binhex(bins = 51)+
                      coord_fixed()+
                      scale_x_continuous(limits = c(-22,22))+
                      scale_y_continuous(limits = c(-22,22))+
+                     geom_abline(slope = 1, intercept = 0,linetype = 2,
+                                 colour = "orange",size = 1.2)+
                      geom_vline(xintercept = 0,linetype = 2)+
                      geom_hline(yintercept = 0,linetype = 2)+
                      theme(legend.position = "right")+
@@ -332,6 +334,311 @@ grid.arrange(scatters[[1]],
              scatters[[2]],
              corpl,
              scatters[[3]],nrow = 2)
+
+```
+
+The figure above exhibits that in the case of NOKS vs dRdZ, the signal to noise metrics are relatively symmetric around the diagonal, but in the case of the other two pairs (EBV vs NOKS, and EBV vs dRdZ) we can notice a slightly tilted distribution towars NOKS, and dRdZ respectively. Searching in the bioconductor forums, I found the [following answer](https://support.bioconductor.org/p/61509/) by the creator of DESeq2, which states a framework to test ratio of ratio (which appears to be a common problem in RIP-seq / CLIP-seq), where the IP counts are normalized by the Input counts (very similar to ChIP-seq).
+
+For that purpose, we fit a different models for each pair of cell lines, which means that we are testing the `cell:treatment` effect, which indicates that we are testing the `treatment` effect across `cell` lines.
+
+```{r fun ,include=TRUE,echo=TRUE,eval=TRUE}
+ratio_of_ratios_deseq <- function(rsem_data,thr = 20)
+{
+  count_matrix =  rsem_data %>% 
+    dplyr::select(file,rsem) %>% 
+    unnest() %>% 
+    dplyr::select(file,gene_id,expected_count) %>% 
+    mutate(
+      expected_count = floor(expected_count)
+      ) %>% 
+    spread(file,expected_count) %>% 
+    as_matrix()
+
+  coldata = rsem_data %>% 
+    dplyr::select(file,cell,treatment) %>% 
+    mutate(interac = paste(cell,treatment, sep = ".")) %>% 
+    as.data.frame() %>% 
+    tibble::remove_rownames() %>% 
+    tibble::column_to_rownames("file")
+
+  deseq = DESeqDataSetFromMatrix(
+    count_matrix,colData = coldata,
+    design = ~ cell + treatment + cell:treatment)
+
+  deseq = deseq[ rowSums(assay(deseq) ) > thr,]
+  deseq = DESeq(deseq, test = "LRT", reduced =  ~ cell + treatment)
+
+  deseq
+  
+}
+```
+
+
+```{r ratio_of_ratio_analysis,include=FALSE,echo=FALSE,eval=TRUE,cache=TRUE,dependson="diff_expression_analysis"}
+
+ratio_of_ratios = tribble(
+  ~ test , ~ deseq,
+  "EBV_vs_NOKS" , 
+  rsem_data %>% 
+    filter(cell != "dRdZ") %>% 
+    ratio_of_ratios_deseq(thr = thr),
+  "EBV_vs_dRdZ" , 
+  rsem_data %>% 
+    filter(cell != "NOKS") %>% 
+    ratio_of_ratios_deseq(thr = thr),
+  "NOKS_vs_dRdZ",
+  rsem_data %>% 
+    filter(cell != "EBV") %>% 
+    ratio_of_ratios_deseq(thr = thr)
+)
+
+clean_results <- function(deseq)
+{
+  results(deseq,
+          cooksCutoff = FALSE,
+          tidy = TRUE) %>% 
+    as_tibble() %>% 
+    dplyr::rename(
+      gene_id = row
+    ) %>% 
+    mutate(
+      log10pval = -log10(pvalue)
+    )
+  
+}
+
+ratio_of_ratios %<>% 
+  mutate(
+    results = map(deseq, clean_results) %>% 
+      map(separate,gene_id , into = c("ensembl","symbol"),
+          sep = "\\_",extra = "drop" )
+  )
+
+```
+
+This test returns a smaller list of genes that are differentially expressed. For example, if we consider the genes that are differentially expressed with adjusted p.value $\leq 0.01$, we can notice that the number of genes that are differentially expressed is much larger when testing the MC effect across the EBV and NOKS cell lines, than when any of them is the mutant type dRdZ.
+
+```{r venn,include=TRUE,fig.align='center',fig.width=4}
+
+library(Vennerable)
+
+ratio_of_ratios %>% 
+  mutate(
+    ll = map(results,filter,padj <= 1e-2) %>% 
+      map(pull,symbol)
+  ) %>% pull(ll) %>% 
+  set_names(pull(ratio_of_ratios,test)) %>% Vennerable::Venn() -> venn_ratios
+
+plot(venn_ratios)
+
+```
+
+Furthermore, we can examine the genes in these subgroups. For example, we can notice that the intersection of `EBV_vs_dRdZ` and `EBV_vs_NOKS` have `r venn_ratios@IntersectionSets[["110"]] %>% length()`, and in that group there are genes such that the distance between EBV and the other cell lines are maximized, thus it results in genes where the signal-to-noise is close between them (i.e. NOKS and dRdZ). Alternatively, in the regions of the Venn diagram where the genes are only differentiated in one category, we can observe that the cell line that was not considered is usually in the middle.
+
+```{r,fig.width=9,fig.height=5,fig.align='center',results='hide'}
+
+nms = c("100" = "EBV_vs_NOKS",
+        "010" = "EBV_vs_dRdZ",
+        "001" = "NOKS_vs_dRdZ",
+        "110" = "EBV_vs_both",
+        "101" = "NOKS_vs_both",
+        "011" = "dRdZ_vs_both"
+        )
+
+venn_d_plot <- function(subset = c("100","010","001","011","101",
+                                      "110","111"),
+                           venn_ratios,diff_genes,   nms = NULL)
+{
+  subset = match.arg(subset)
+  
+  ss = venn_ratios@IntersectionSets[[subset]]
+  
+  nm = if_else(is.null(nms), subset,nms[subset])
+  
+  out = diff_genes %>% 
+    mutate(results = map(results,separate,gene_id,into = c("ensembl","symbol"),
+                         sep = "\\_",extra = "drop") %>% 
+             map(filter,symbol %in% ss)) %>% 
+    dplyr::select(cell,results) %>% 
+    unnest() %>%
+    mutate(symbol = fct_reorder(symbol,stat)) %>% 
+    ggplot(aes(symbol , stat,colour = cell))+
+    geom_point(size = 2)+
+    theme(
+      axis.text.x = element_text(angle = 90,vjust = .5,hjust= 1),
+      axis.title.x = element_blank()
+    )+
+    scale_color_tech("google")+
+    geom_hline(yintercept = 0,linetype = 2)+
+    ylab("Signal-to-noise")+ggtitle(nm)
+  
+  if(length(ss) > 60){
+    out = out + theme(axis.text.x = element_text(angle = 90,vjust = .5,hjust = 1,
+                                                 size = 4))
+  }
+  out
+
+}
+
+venn_ratios@IntersectionSets %>% names() %>% 
+{.[! . %in% c("000","111")]} %>% 
+  map(  venn_d_plot,
+        venn_ratios = venn_ratios,diff_genes = diff_genes,nms = nms)
+
+```
+
+```{r,fig.width=5,fig.height=9,include=FALSE,echo=FALSE,eval=FALSE}
+
+## Deprecated code
+
+library(ggrepel)
+
+diff_genes %>% 
+  dplyr::select(cell, results) %>% 
+  unnest() %>% 
+  dplyr::select(cell,gene_id,stat) %>% 
+  spread(cell,stat) %>% 
+  mutate(
+    dRdZ_EBV = dRdZ / EBV - 1,
+    dRdZ_NOKS = dRdZ / NOKS -1 ,
+    NOKS_EBV = NOKS / EBV -1
+  ) %>% 
+  dplyr::select(-EBV,-NOKS,-dRdZ) %>% 
+  mutate(id = seq_along(gene_id)) %>% 
+  gather(test,value,-id,-gene_id) -> ss2
+
+M = 100
+
+gene_list = ss2 %>% 
+  separate(gene_id,into = c("ensembl","gene_id"),sep = "\\_",extra = "drop") %>% 
+  filter(!between(value,-M,M)) %>% 
+  filter(abs(value) < 10000) %>% 
+  pull(gene_id) %>% unique()
+
+diff_genes %>% 
+  dplyr::select(cell,results) %>% 
+  unnest() %>% 
+  separate(gene_id,into = c("ensem","gene_id"),sep = "\\_",extra = "drop") %>% 
+  filter(gene_id %in% gene_list) %>% 
+  filter(padj <= .1) %>% 
+  dplyr::select(cell,gene_id,stat,padj) %>% 
+  ggplot(aes(reorder(gene_id,-padj),-log10(padj)))+
+  geom_col(aes(fill = cell),position = "dodge")+
+  coord_flip()
+# ss2 %>% 
+#   separate(gene_id,into = c("ensembl","gene_id"),sep = "\\_",extra = "drop") %>% 
+#   filter(!between(value,-M,M)) %>% 
+#   filter(abs(value) < 10000) %>% 
+#   ggplot(aes(id,value,colour = test))+geom_point()+
+#   geom_text_repel(aes(label = gene_id))
+
+
+
+```
+
+# Pathway analysis
+
+This analysis returns a different signal-to-noise metric for each cell line. Hence, we are capable of performing a pathway analysis too. For example, we can notice that the none of the `MYC_TARGETS_V1` or `MYC_TARGETS_V2` pathways are enriched in the `EBV_vs_dRdZ` test, but the first one is enriched in the `EBV_vs_NOKS` test and both are enriched in the `NOKS_vs_dRdZ` test.
+
+```{r gsea, message=FALSE,include=FALSE,eval=TRUE,echo=FALSE}
+
+gmt_files =  here::here("data/Pathway") %>% 
+  list.files(full.names = TRUE,recursive = TRUE) %>% 
+  stri_subset("kera") %>% 
+  set_names(
+    {
+      c("hallmark","curated")
+    }
+  )
+
+pathways = tibble(
+ pathway_name = names(gmt_files), files = gmt_files
+) %>% 
+  mutate(
+    pathways = files %>% 
+      map(read.gmt) %>% map(as_tibble)
+  ) %>% 
+  dplyr::select(-files) 
+
+name <- function(.x){
+  nms = pull(.x,symbol)
+  pull(.x,stat) %>% set_names(nms)
+  
+}
+
+ratio_of_ratios %<>% 
+  crossing(pathways) %>% 
+  mutate(
+    genes_list = map(results,arrange,desc(stat) ) %>% map(name),
+    gsea = map2( genes_list, pathways,
+                 ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE)),
+    gsea_results = map(gsea,"result") %>% map(as_tibble))
+
+```
+
+
+
+```{r pathway_NES,include=TRUE,echo=FALSE,fig.align="center",fig.width=8,fig.height=12}
+
+gsea_data = ratio_of_ratios %>% 
+  dplyr::filter(pathway_name == "hallmark") %>% 
+  dplyr::select(test,gsea_results) %>% 
+  mutate(
+    gsea_results = map(gsea_results,arrange,NES)) %>%
+  unnest() %>% 
+  mutate(order = seq_along(NES))
+
+
+gsea_data %>% 
+  ggplot( aes(order,NES,fill = pvalue))+
+  geom_bar(stat = "identity")+
+  scale_fill_gradientn(colours = viridis::viridis(100),
+                       guide = guide_colourbar(title = NULL,
+                                                 barheight = unit(0.8,"npc"),
+                        barwidth = unit(0.01,"npc")))+
+  coord_flip()+
+  scale_x_continuous(    expand = c(0,0),
+                         breaks = gsea_data$order,
+                         labels = gsea_data$ID)+
+  facet_grid(test ~ . ,scales = "free_y",space = "free_y")+
+  theme_minimal()+
+  theme(legend.position = "right",
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_blank())
+    
+
+
+```
+
+```{r pathway_NES2,include=TRUE,echo=FALSE,fig.align="center",fig.width=8,fig.height=2}
+
+gsea_data = ratio_of_ratios %>% 
+  dplyr::filter(pathway_name != "hallmark") %>% 
+  dplyr::select(test,gsea_results) %>% 
+  mutate(
+    gsea_results = map(gsea_results,arrange,NES)) %>%
+  unnest() %>% 
+  mutate(order = seq_along(NES))
+
+gsea_data %>% 
+  ggplot( aes(order,NES,fill = pvalue))+
+  geom_bar(stat = "identity")+
+  scale_fill_gradientn(colours = viridis::viridis(100),
+                       guide = guide_colourbar(title = NULL,
+                                                 barheight = unit(0.8,"npc"),
+                        barwidth = unit(0.01,"npc")))+
+  coord_flip()+
+  scale_x_continuous(    expand = c(0,0),
+                         breaks = gsea_data$order,
+                         labels = gsea_data$ID)+
+  facet_grid(test ~ . ,scales = "free_y",space = "free_y")+
+  theme_minimal()+
+  theme(legend.position = "right",
+        axis.text.y = element_text(size = 10),
+        strip.text.y = element_text(angle = 0),
+        axis.title.y = element_blank())
+    
+
 
 ```
 
