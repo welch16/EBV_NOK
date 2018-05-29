@@ -672,6 +672,7 @@ fillCol(flex = c(.1,.8,.1),
           
           d3heatmap(my_mat,
                     colors = pal,
+                    scale = "row",
                     xaxis_font_size = 12,
                     yaxis_font_size = 12)}),
         fillRow(flex = c(.1,.3,.3,.3),
@@ -687,6 +688,7 @@ observeEvent(input$heat_save,{
   
   pheatmap::pheatmap(
     mat = mat(),
+    clustering_method = "complete",
     scale = "row",
     color = pal,
     fontsize = input$ts,
