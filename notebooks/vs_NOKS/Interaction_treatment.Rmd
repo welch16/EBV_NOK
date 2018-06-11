@@ -525,13 +525,6 @@ diff_genes %>%
   ggplot(aes(reorder(gene_id,-padj),-log10(padj)))+
   geom_col(aes(fill = cell),position = "dodge")+
   coord_flip()
-# ss2 %>% 
-#   separate(gene_id,into = c("ensembl","gene_id"),sep = "\\_",extra = "drop") %>% 
-#   filter(!between(value,-M,M)) %>% 
-#   filter(abs(value) < 10000) %>% 
-#   ggplot(aes(id,value,colour = test))+geom_point()+
-#   geom_text_repel(aes(label = gene_id))
-
 
 
 ```
@@ -641,5 +634,86 @@ gsea_data %>%
 
 
 ```
+
+# Demo gene coefficients
+
+Lets recall the DESeq model, for gene $i$ and sample $j$:
+
+$$
+\begin{aligned}
+K_{ij} &\sim \mbox{NB}(\mu_{ij}, \alpha_i) \\
+\mu_{ij} &= s_j q_{ij} \\
+\log_2(q_{ij}) &= \mathbf{x}_{j\cdot}\beta_i
+\end{aligned}
+$$
+where:
+
+- $K_{ij}$ are the counts of gene $i$ and sample $j$
+- $\mu_{ij}$ is the fitted mean, and $\alpha_i$ is a gene-specific dispersion parameter
+
+The dispersion specific parameters are obtained by fitting a model of the following relationship:
+
+$$
+\mbox{Var}(K_{ij}) = \mu_{ij} + \alpha_i \mu_{ij}^2
+$$
+
+From this description of the model, we can notice that:
+
+1. For every gene, we estimate a different model defined by its mean and dispersion parameters. 
+
+2. This model differs from a typical linear regression model in the estimation of the variance. From the previous equation, we can observe that the estimated variance of the counts for gene $i$ and sample $j$ depends on the estimated mean. Hence, when testing for the significance of more than one terms it is necessary to use different methods.
+
+3. The method that we used (suggested in [here](https://support.bioconductor.org/p/61509/)) is the LRT. Which sort of works like an ANOVA test, as it always positive and we are comparing the likelihood of the full model `~ cell + treatment + cell:treatment` with the likelihood of the reduced model `~ cell + treatment`.
+
+As an example, we are going to consider the test that we did for the ratios of EBV vs NOKS (respect to treatment), we can see that the size factors are a slight correction (i.e. close to 1) but we are still working in the count scale:
+
+```{r deseq_demo, include=TRUE,echo=TRUE,eval=TRUE}
+
+demo_deseq = ratio_of_ratios$deseq[[1]]  ## we already fit this one
+colData(demo_deseq)
+
+```
+
+For every gene, we are testing the interaction effect between the reduced model `~ cell + treatment` and the full model `~ cell + treatment + cell:treatment`. The model matrices are:
+
+- Reduced model `~ cell + treatment`
+
+```{r , include=TRUE,eval=TRUE,echo=TRUE}
+
+with(colData(demo_deseq), model.matrix( ~ cell + treatment))
+
+```
+
+- Full model `~ cell + treatment + cell:treatment`
+
+```{r , include=TRUE,eval=TRUE,echo=TRUE}
+
+with(colData(demo_deseq), model.matrix( ~ cell + treatment + cell:treatment))
+
+```
+
+For example, we can check for a few genes:
+
+
+```{r coeff_matrix, include=TRUE,echo=TRUE,eval=TRUE}
+
+coeffs = coef(demo_deseq)
+
+geneID = "MAP1B"
+coeffs[ rownames(coeffs) %>% 
+          str_detect(geneID),]
+
+geneID = "MPZL3"
+coeffs[ rownames(coeffs) %>% 
+          str_detect(geneID),]
+
+
+```
+
+
+
+
+
+
 
 
