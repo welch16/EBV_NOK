@@ -603,6 +603,53 @@ gsea_data %>%
 
 ```
 
+
+## GSEA plots for `MYC_TARGETS`:
+
+```{r myc_pathways, include=TRUE,echo=FALSE,eval=TRUE,fig.width=10,fig.height=8,warning=FALSE}
+runningScore_comparison = function(geneSetID, gsea_tibb)
+{
+
+  gsea_tibb %<>%
+    mutate(score_plots = map(gsea, 
+                             ~ gseaplot(., geneSetID,by = "runningScore")) %>%
+             map2(test , ~ .x + ylab(.y)),
+           prerank_plots = map2(gsea,test,
+                                ~ gseaplot(.,geneSetID,by = "preranked")) %>% 
+             map2(test, ~ .x + ylab(.y)))
+  
+  grid.arrange(gsea_tibb$score_plots[[1]],
+               gsea_tibb$prerank_plots[[1]],
+               gsea_tibb$score_plots[[2]],
+               gsea_tibb$prerank_plots[[2]],
+               gsea_tibb$score_plots[[3]],
+               gsea_tibb$prerank_plots[[3]],top = geneSetID,
+               nrow = 3)
+}
+
+hallmark_gsea = ratio_of_ratios %>% 
+  filter(pathway_name == "hallmark") %>% 
+  dplyr::select(test,gsea)
+
+runningScore_comparison("HALLMARK_MYC_TARGETS_V1",hallmark_gsea)
+
+runningScore_comparison("HALLMARK_MYC_TARGETS_V2",hallmark_gsea)
+
+
+```
+
+### GSEA plot for `DNA_REPAIR`
+
+I picked this pathway because it appear in both of the treated vs untreated pathways of Scott's cell lines, but in none of your data.
+
+```{r demo_bad,include=TRUE,echo=FALSE,eval=TRUE,fig.width=10,fig.height=8,warning=FALSE}
+
+runningScore_comparison("HALLMARK_DNA_REPAIR",hallmark_gsea)
+
+
+```
+
+
 ```{r pathway_NES2,include=TRUE,echo=FALSE,fig.align="center",fig.width=8,fig.height=2}
 
 gsea_data = ratio_of_ratios %>% 
