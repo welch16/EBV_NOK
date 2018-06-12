@@ -1,10 +1,10 @@
 ---
 title: "Comparison by treatment"
 output:
+  pdf_document:
+    toc: yes
   html_document:
     theme: simplex
-    toc: yes
-  pdf_document:
     toc: yes
 ---
 
@@ -815,6 +815,20 @@ with(colData(demo_deseq), model.matrix( ~ cell + treatment + cell:treatment))
 ```
 
 For example, we can check for a few genes:
+```{r countmatrix, include=TRUE,echo=TRUE,eval=TRUE}
+
+count_matrix = assay(demo_deseq,"counts")
+
+geneID = "MAP1B"
+log2(count_matrix)[ rownames(count_matrix) %>% 
+          str_detect(geneID),]
+
+geneID = "MPZL3"
+log2(count_matrix)[ rownames(count_matrix) %>% 
+          str_detect(geneID),]
+
+
+```
 
 
 ```{r coeff_matrix, include=TRUE,echo=TRUE,eval=TRUE}
