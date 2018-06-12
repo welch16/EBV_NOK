@@ -633,6 +633,12 @@ hallmark_gsea = ratio_of_ratios %>%
 
 runningScore_comparison("HALLMARK_MYC_TARGETS_V1",hallmark_gsea)
 
+
+```
+
+
+```{r demo_myc2,include=TRUE,echo=FALSE,eval=TRUE,fig.width=10,fig.height=8,warning=FALSE}
+
 runningScore_comparison("HALLMARK_MYC_TARGETS_V2",hallmark_gsea)
 
 
