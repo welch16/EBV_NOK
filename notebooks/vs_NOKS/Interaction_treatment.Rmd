@@ -337,7 +337,7 @@ grid.arrange(scatters[[1]],
 
 ```
 
-The figure above exhibits that in the case of NOKS vs dRdZ, the signal to noise metrics are relatively symmetric around the diagonal, but in the case of the other two pairs (EBV vs NOKS, and EBV vs dRdZ) we can notice a slightly tilted distribution towars NOKS, and dRdZ respectively. Searching in the bioconductor forums, I found the [following answer](https://support.bioconductor.org/p/61509/) by the creator of DESeq2, which states a framework to test ratio of ratio (which appears to be a common problem in RIP-seq / CLIP-seq), where the IP counts are normalized by the Input counts (very similar to ChIP-seq).
+The figure above exhibits that in the case of NOKS vs dRdZ, the signal to noise metrics are relatively symmetric around the diagonal, but in the case of the other two pairs (EBV vs NOKS, and EBV vs dRdZ) we can notice a slightly tilted distribution towards NOKS, and dRdZ respectively. Searching in the Bioconductor forums, I found the [following answer](https://support.bioconductor.org/p/61509/) by the creator of DESeq2, which states a framework to test ratio of ratio (which appears to be a common problem in RIP-seq / CLIP-seq), where the IP counts are normalized by the Input counts (very similar to ChIP-seq).
 
 For that purpose, we fit a different models for each pair of cell lines, which means that we are testing the `cell:treatment` effect, which indicates that we are testing the `treatment` effect across `cell` lines.
 
@@ -648,6 +648,75 @@ runningScore_comparison("HALLMARK_DNA_REPAIR",hallmark_gsea)
 
 
 ```
+
+
+```{r bio_theme_comparison,fig.align='center',fig.height=9,fig.width=7.5}
+
+process_results = function(gsea)
+{
+  res = gsea@result  %>% 
+    as_data_frame()
+  
+  res %>% 
+    mutate(
+      core_enrichment = str_split(core_enrichment,"/"),
+      ngenes = map_dbl(core_enrichment,length),
+      ratio = ngenes / setSize
+    )
+  
+}
+
+gsea_pathways = ratio_of_ratios %>% 
+  filter(pathway_name == "hallmark") %>% 
+  mutate(
+    clean_res = map(gsea,process_results)
+  )
+
+
+gsea_pathways %>% 
+  filter(test != "EBV_vs_NOKS") %>% 
+  dplyr::select(test,clean_res) %>% 
+  unnest() %>% 
+  ggplot(aes(test,reorder(ID,-p.adjust),size = ratio))+
+  geom_point(aes(colour = p.adjust))+
+  theme(
+    legend.position=c(1,1), 
+    legend.justification=c(0, 1), 
+    legend.key.width=unit(1, "lines"), 
+    plot.margin = unit(c(1, 5, 0.5, 0.5), "lines"),
+    legend.box = "vertical",
+    axis.title = element_blank(),
+    axis.text.x = element_text(angle = 90,hjust = 1,vjust = .5)
+  )+
+  scale_color_distiller(palette = "Spectral",
+                        guide = guide_colourbar(title = "padj",
+                                                barheight = unit(0.5,"npc"),
+                                                barwidth = unit(0.01,"npc")))
+
+```
+
+
+```{r venn_pathway, include=TRUE,fig.align='center',fig.width=4}
+
+gsea_pathways %<>% 
+  filter(test != "EBV_vs_NOKS") %>% 
+  dplyr::select(test,clean_res) %>% 
+  mutate(
+    ID = map(clean_res,pull,ID)
+  )
+
+pull(gsea_pathways,ID) %>% 
+  set_names(pull(gsea_pathways,test)) %>% 
+  Vennerable::Venn() -> venn_ratios2
+
+plot(venn_ratios2)
+
+
+
+
+```
+
+Brief note: There are `r venn_ratios2@IntersectionSets[["11"]] %>% length()` shared pathways, `r venn_ratios2@IntersectionSets[["10"]] %>% length()` that are EBV vs dRdZ specific, and `r venn_ratios2@IntersectionSets[["01"]] %>% length()` that are NOKS vs dRdZ specific. This suggests, that dRdZ is more similar than NOKS as there is a smaller amount of enriched pathways that turn on by the genes that show a significant interaction between dRdZ and NOKS when the treatment in applied.
 
 
 ```{r pathway_NES2,include=TRUE,echo=FALSE,fig.align="center",fig.width=8,fig.height=2}
