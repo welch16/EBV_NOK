@@ -1,10 +1,10 @@
 ---
 title: "Comparison by treatment"
 output:
-  pdf_document:
-    toc: yes
   html_document:
     theme: simplex
+    toc: yes
+  pdf_document:
     toc: yes
 ---
 
@@ -660,15 +660,22 @@ runningScore_comparison("HALLMARK_DNA_REPAIR",hallmark_gsea)
 
 process_results = function(gsea)
 {
+
   res = gsea@result  %>% 
     as_data_frame()
   
-  res %>% 
-    mutate(
-      core_enrichment = str_split(core_enrichment,"/"),
-      ngenes = map_dbl(core_enrichment,length),
-      ratio = ngenes / setSize
-    )
+  out = res
+
+  if(nrow(out) > 0){
+    out %<>% 
+      mutate(
+        core_enrichment = str_split(core_enrichment,"/"),
+        ngenes = map_dbl(core_enrichment,length),
+        ratio = ngenes / setSize
+        )
+  }
+  
+  out
   
 }
 
@@ -677,6 +684,7 @@ gsea_pathways = ratio_of_ratios %>%
   mutate(
     clean_res = map(gsea,process_results)
   )
+
 
 
 gsea_pathways %>% 
@@ -700,6 +708,39 @@ gsea_pathways %>%
                                                 barwidth = unit(0.01,"npc")))
 
 ```
+
+
+```{r bio_theme_comp_curated,fig.align='center',fig.width=7.5,fig.height=8}
+
+gsea_pathways_curated = ratio_of_ratios %>% 
+  filter(pathway_name != "hallmark") %>% 
+  mutate(
+    clean_res = map(gsea,process_results)
+  )
+
+gsea_pathways_curated %>% 
+  filter(test != "EBV_vs_NOKS") %>% 
+  dplyr::select(test,clean_res) %>% 
+  unnest() %>% 
+  ggplot(aes(test,reorder(ID,-p.adjust),size = ratio))+
+  geom_point(aes(colour = p.adjust))+
+  theme(
+    legend.position=c(1,1), 
+    legend.justification=c(0, 1), 
+    legend.key.width=unit(1, "lines"), 
+    plot.margin = unit(c(1, 5, 0.5, 0.5), "lines"),
+    legend.box = "vertical",
+    axis.title = element_blank(),
+    axis.text.x = element_text(angle = 90,hjust = 1,vjust = .5)
+  )+
+  scale_color_distiller(palette = "Spectral",
+                        guide = guide_colourbar(title = "padj",
+                                                barheight = unit(0.5,"npc"),
+                                                barwidth = unit(0.01,"npc")))
+
+
+```
+
 
 
 ```{r venn_pathway, include=TRUE,fig.align='center',fig.width=4}
