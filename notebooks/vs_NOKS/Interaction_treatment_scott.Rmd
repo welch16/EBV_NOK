@@ -1,0 +1,338 @@
+---
+title: "Comparison by treatment: Scott's data"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: simplex
+    toc: yes
+---
+
+# Intro
+
+I am adapting the previous analysis to old Scott's data. Obviously a lot of the plots are going to be reduced, but in a nutshell will do:
+
+1. Perform contrast of MC-treated vs untreated samples for each cell line.
+
+2. Compare the Wald's t-statistic between the three cell lines.
+
+
+```{r load,include=FALSE,echo=FALSE,eval=TRUE}
+library(magrittr)
+library(tidyverse)
+library(ghibli)
+library(here)
+library(viridis)
+library(ggtech)
+library(hexbin)
+library(rlang)
+library(rwlib)
+library(clusterProfiler)
+library(grid)
+library(gridExtra)
+library(scales)
+library(knitr)
+library(DESeq2)
+
+pal = viridis(1e3, option = "D")
+
+theme_set(theme_minimal() + 
+            theme(legend.position = "top",
+                  axis.text = element_text(size = 14),
+                  axis.title = element_text(size = 16),
+                  legend.title = element_text(size = 16),
+                  legend.text = element_text(size = 14),
+                  strip.text = element_text(size = 16)))
+
+knitr::opts_chunk$set(eval = TRUE,
+                      echo = FALSE,
+                    include = TRUE,
+                    warning = FALSE,
+                    message = FALSE)
+
+thr = 20
+
+as_matrix <- function(x)
+{
+  x %>% 
+    as.data.frame() %>% 
+    tibble::remove_rownames() %>% 
+    tibble::column_to_rownames("gene_id") %>% 
+    as.matrix()
+}
+
+
+```
+
+```{r diff_expression_analyis, cache=TRUE, include=FALSE}
+dr = here("data/RSEM/hg19")
+alignment = here("figs/fig2/Scott_aligned_reads_table.tsv") %>% 
+  read_tsv()
+
+
+rsem_data = tibble(
+  file = list.files(dr,full.names = TRUE)) %>% 
+  mutate(
+    genes = if_else(str_detect(file,"genes"),"genes","isoforms"),
+    lab = if_else(str_detect(file,"Noks"),"Scott","Johansenn")) %>% 
+  filter( lab == "Scott") %>% 
+  mutate(
+    cell = if_else(str_detect(file,"Noks_EBV"),"EBV","NOKS"),
+    treatment = if_else(str_detect(file,"MC"),"MC","none"),
+    rsem = map(file,read_tsv),
+    genes = NULL,
+    lab = NULL,
+    file = basename(file) %>% 
+      str_replace(".genes.results","")
+  ) %>% 
+  filter( ! (str_detect(file , "rep1")  & cell == "EBV" & treatment == "none")) %>% 
+  mutate(
+    rsem = map(rsem, ~ dplyr::select(.,-contains("transcript"))) ## didn't use transcript_id(s)
+  )
+```
+
+```{r fun ,include=TRUE,echo=TRUE,eval=TRUE}
+ratio_of_ratios_deseq <- function(rsem_data,thr = 20)
+{
+  count_matrix =  rsem_data %>% 
+    dplyr::select(file,rsem) %>% 
+    unnest() %>% 
+    dplyr::select(file,gene_id,expected_count) %>% 
+    mutate(
+      expected_count = floor(expected_count)
+      ) %>% 
+    spread(file,expected_count) %>% 
+    as_matrix()
+
+  coldata = rsem_data %>% 
+    dplyr::select(file,cell,treatment) %>% 
+    mutate(interac = paste(cell,treatment, sep = ".")) %>% 
+    as.data.frame() %>% 
+    tibble::remove_rownames() %>% 
+    tibble::column_to_rownames("file")
+
+  deseq = DESeqDataSetFromMatrix(
+    count_matrix,colData = coldata,
+    design = ~ cell + treatment + cell:treatment)
+
+  deseq = deseq[ rowSums(assay(deseq) ) > thr,]
+  deseq = DESeq(deseq, test = "LRT", reduced =  ~ cell + treatment)
+
+  deseq
+  
+}
+```
+
+
+```{r ratio_of_ratio_analysis,include=FALSE,echo=FALSE,eval=TRUE,cache=TRUE,dependson="diff_expression_analysis"}
+
+deseq = ratio_of_ratios_deseq(rsem_data,thr = 20)
+
+clean_results <- function(deseq)
+{
+  results(deseq,
+          cooksCutoff = FALSE,
+          tidy = TRUE) %>% 
+    as_tibble() %>% 
+    dplyr::rename(
+      gene_id = row
+    ) %>% 
+    mutate(
+      log10pval = -log10(pvalue)
+    )
+  
+}
+
+results = clean_results(deseq)
+
+results %<>% 
+  separate(gene_id , into = c("ensembl","symbol"),
+          sep = "\\_",extra = "drop" )
+```
+
+# Pathway analysis
+
+This analysis returns a different signal-to-noise metric for each cell line. Hence, we are capable of performing a pathway analysis too. 
+
+```{r gsea, message=FALSE,include=FALSE,eval=TRUE,echo=FALSE}
+
+gmt_files =  here::here("data/Pathway") %>% 
+  list.files(full.names = TRUE,recursive = TRUE) %>% 
+  stri_subset("kera") %>% 
+  set_names(
+    {
+      c("hallmark","curated")
+    }
+  )
+
+pathways = tibble(
+ pathway_name = names(gmt_files), files = gmt_files
+) %>% 
+  mutate(
+    pathways = files %>% 
+      map(read.gmt) %>% map(as_tibble)
+  ) %>% 
+  dplyr::select(-files) 
+
+name <- function(.x){
+  nms = pull(.x,symbol)
+  pull(.x,stat) %>% set_names(nms)
+  
+}
+
+results = tribble(
+  ~ test , ~ results,
+  "EBV_vs_NOKS", results
+)
+
+set.seed(12345)
+
+results %<>% 
+  crossing(pathways) %>% 
+  mutate(
+    genes_list = map(results,arrange,desc(stat) ) %>% map(name),
+    gsea = map2( genes_list, pathways,
+                 ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE,seed = TRUE,
+                        nPerm = 5e3)),
+    gsea_results = map(gsea,"result") %>% map(as_tibble))
+
+```
+
+
+
+```{r pathway_NES,include=TRUE,echo=FALSE,fig.align="center",fig.width=6,fig.height=2}
+
+gsea_data = results %>% 
+  dplyr::filter(pathway_name == "hallmark") %>% 
+  dplyr::select(test,gsea_results) %>% 
+  mutate(
+    gsea_results = map(gsea_results,arrange,NES)) %>%
+  unnest() %>% 
+  mutate(order = seq_along(NES))
+
+
+gsea_data %>% 
+  ggplot( aes(order,NES,fill = pvalue))+
+  geom_bar(stat = "identity")+
+  scale_fill_gradientn(colours = viridis::viridis(100),
+                       guide = guide_colourbar(title = NULL,
+                                                 barheight = unit(0.8,"npc"),
+                        barwidth = unit(0.01,"npc")))+
+  coord_flip()+
+  scale_x_continuous(    expand = c(0,0),
+                         breaks = gsea_data$order,
+                         labels = gsea_data$ID)+
+  facet_grid(test ~ . ,scales = "free_y",space = "free_y")+
+  theme_minimal()+
+  theme(legend.position = "right",
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_blank())
+    
+```
+
+
+## GSEA plots for `MYC_TARGETS`:
+
+```{r myc_pathways, include=TRUE,echo=FALSE,eval=TRUE,fig.width=10,fig.height=3,warning=FALSE}
+runningScore_comparison = function(geneSetID, gsea_tibb)
+{
+
+  gsea_tibb %<>%
+    mutate(score_plots = map(gsea, 
+                             ~ gseaplot(., geneSetID,by = "runningScore")) %>%
+             map2(test , ~ .x + ylab(.y)),
+           prerank_plots = map2(gsea,test,
+                                ~ gseaplot(.,geneSetID,by = "preranked")) %>% 
+             map2(test, ~ .x + ylab(.y)))
+  
+  grid.arrange(gsea_tibb$score_plots[[1]],
+               gsea_tibb$prerank_plots[[1]],top = geneSetID,
+               nrow = 1)
+}
+
+hallmark_gsea = results %>% 
+  filter(pathway_name == "hallmark") %>% 
+  dplyr::select(test,gsea)
+
+runningScore_comparison("HALLMARK_MYC_TARGETS_V1",hallmark_gsea)
+
+
+```
+
+
+```{r demo_myc2,include=TRUE,echo=FALSE,eval=TRUE,fig.width=10,fig.height=3,warning=FALSE}
+
+runningScore_comparison("HALLMARK_MYC_TARGETS_V2",hallmark_gsea)
+
+
+```
+
+### GSEA plot for `DNA_REPAIR`
+
+I picked this pathway because it appear in both of the treated vs untreated pathways of Scott's cell lines, but in none of your data.
+
+```{r demo_bad,include=TRUE,echo=FALSE,eval=TRUE,fig.width=10,fig.height=3,warning=FALSE}
+
+runningScore_comparison("HALLMARK_DNA_REPAIR",hallmark_gsea)
+
+
+```
+
+
+```{r bio_theme_comparison,fig.align='center',fig.height=4.5,fig.width=7.5}
+
+process_results = function(gsea)
+{
+
+  res = gsea@result  %>% 
+    as_data_frame()
+  
+  out = res
+
+  if(nrow(out) > 0){
+    out %<>% 
+      mutate(
+        core_enrichment = str_split(core_enrichment,"/"),
+        ngenes = map_dbl(core_enrichment,length),
+        ratio = ngenes / setSize
+        )
+  }
+  
+  out
+  
+}
+
+gsea_pathways = results %>% 
+  filter(pathway_name == "hallmark") %>% 
+  mutate(
+    clean_res = map(gsea,process_results)
+  )
+
+
+
+gsea_pathways %>% 
+  dplyr::select(test,clean_res) %>% 
+  unnest() %>% 
+  ggplot(aes(test,reorder(ID,-p.adjust),size = ratio))+
+  geom_point(aes(colour = p.adjust))+
+  theme(
+    legend.position=c(1,1), 
+    legend.justification=c(0, 1), 
+    legend.key.width=unit(1, "lines"), 
+    plot.margin = unit(c(1, 5, 0.5, 0.5), "lines"),
+    legend.box = "vertical",
+    axis.title = element_blank(),
+    axis.text.x = element_text(angle = 90,hjust = 1,vjust = .5)
+  )+
+  scale_color_distiller(palette = "Spectral",
+                        guide = guide_colourbar(title = "padj",
+                                                barheight = unit(0.5,"npc"),
+                                                barwidth = unit(0.01,"npc")))
+
+```
+
+
+
+
+
+
