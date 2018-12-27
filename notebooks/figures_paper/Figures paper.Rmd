@@ -1,0 +1,115 @@
+---
+title: "Figures 2018-12-26"
+output:
+  html_document:
+    toc: true
+    self_contained: no
+    theme: cerulean    
+---
+
+# Main figures
+
+```{r setup, include=FALSE,eval=TRUE,echo=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE,eval = TRUE,
+                      include = TRUE,warning = FALSE,
+                      message = FALSE,
+                      fig.width = 5,fig.height = 5,
+                      fig.align = "center")
+
+library(here)
+library(rwlib)
+library(magrittr)
+library(tidyverse)
+library(scales)
+library(ggrepel)
+library(conflicted)
+
+conflict_prefer("filter","dplyr")
+conflict_prefer("lag","dplyr")
+conflict_prefer("extract","tidyr")
+conflict_prefer("Position","ggplot2")
+conflict_prefer("col_factor","readr")
+conflict_prefer("discard","purrr")
+
+theme_set(
+  theme_bw()+
+    theme(
+      strip.background = element_blank()
+    ))
+
+```
+
+
+```{r load_data, include=FALSE}
+
+scott_data = here("apps/Fig3_dashboad/fig3data.RData") %>% 
+  load2env() %>% 
+  as.list()
+
+
+```
+
+
+```{r plot_rfuns}
+
+gene_expr_fold_change_plot <- function(DT,xvar,yvar,sc = 10)
+{
+  pal = viridis::viridis(1e3, option = "D")
+  
+  ggplot(DT,aes_string(xvar,yvar))+stat_binhex(bins = 140) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.92,"npc"),
+                           barwidth = unit(0.05,"npc")))+
+    xlim(-sc,sc)+ylim(-sc,sc)    
+}
+
+
+```
+
+
+## Figure 6A
+
+__Scott Fold change:__ The idea of this figure is two fold. a) 
+
+```{r scott_fold_change}
+
+
+
+
+
+```
+
+
+# Supplement figures
+
+## Supp. Fig 1
+
+__Scott data QC:__ We removed the EBV - NT first replicate due to lower quality.
+
+```{r scott_aligned_reads}
+
+scott_data$alignment %>% 
+  mutate(
+    treat = if_else(treat == "None", "NT",treat) %>% 
+      factor() %>% fct_rev(),
+    cell = factor(cell) %>% fct_rev()
+  ) %>% 
+  ggplot(aes(aligned_percent,aligned))+
+  geom_point()+
+  facet_grid(
+    treat ~ cell
+  )+
+  geom_text_repel(aes(label = replicate))+
+  scale_x_continuous(labels = percent_format(accuracy = 1))+
+  scale_y_continuous(labels = comma_format(scale = 1e-6,suffix = "M"))+
+  labs(
+    x = "Percentage of aligned reads",
+    y = "Number of aligned reads"
+  )
+
+```
+
+
