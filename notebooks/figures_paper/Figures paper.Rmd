@@ -3,6 +3,7 @@ title: "Figures 2018-12-26"
 output:
   html_document:
     toc: true
+    toc_depth: 2
     self_contained: no
     theme: cerulean    
 ---
@@ -19,10 +20,12 @@ knitr::opts_chunk$set(echo = FALSE,eval = TRUE,
 
 library(here)
 library(rwlib)
+library(Vennerable)
 library(magrittr)
 library(tidyverse)
 library(scales)
 library(ggrepel)
+library(gridExtra)
 library(conflicted)
 
 conflict_prefer("filter","dplyr")
@@ -31,11 +34,18 @@ conflict_prefer("extract","tidyr")
 conflict_prefer("Position","ggplot2")
 conflict_prefer("col_factor","readr")
 conflict_prefer("discard","purrr")
+conflict_prefer("expand","tidyr")
+conflict_prefer("rename","dplyr")
 
 theme_set(
   theme_bw()+
     theme(
-      strip.background = element_blank()
+      strip.background = element_blank(),
+      axis.text = element_text(size =12),
+      axis.title = element_text(size = 14),
+      legend.text = element_text(size =12),
+      legend.title = element_text(size = 14)
+      
     ))
 
 ```
@@ -43,7 +53,16 @@ theme_set(
 
 ```{r load_data, include=FALSE}
 
+noks_vs_ebv_NT = here("apps/Fig2_dashboad/fig2data.RData") %>% 
+  load2env() %>% 
+  as.list() %>% 
+  pluck("diff_genes")
+
 scott_data = here("apps/Fig3_dashboad/fig3data.RData") %>% 
+  load2env() %>% 
+  as.list()
+
+new_data = here("apps/Fig5_dashboard/fig5data.RData") %>% 
   load2env() %>% 
   as.list()
 
@@ -69,10 +88,230 @@ gene_expr_fold_change_plot <- function(DT,xvar,yvar,sc = 10)
 
 ```
 
+## Fig 3A 
+
+Mark mentioned that the idea of this figure is to show that there a not many genes being differentially expressed when comparing NOKS vs EBV. I think that unless we add more elements like:
+
+1. Label genes of interest
+
+2. Add lines resembling the fold change values used for fig. 3B (which I am told is one of the criteria used to draw that figure)
+
+It only makes hardes for the reader to catch the point of the figure. For that purpose, I propose the figure below which compares the number of differentially expressed genes explicitely.
+
+
+```{r noks_vs_ebv_volcano_plot}
+
+fdr = 1e-3
+
+noks_vs_ebv_NT %<>% 
+  mutate(
+    diff_expr = if_else(padj <= fdr,"yes","no")
+  )
+
+noks_vs_ebv_NT %>% 
+  ggplot(aes(log2FoldChange,-log10(pvalue),colour = diff_expr))+
+  geom_point(alpha = .5,size =2)+
+  labs(
+    x = expression(log[2]('fold change')),
+    y = expression(-log[10]('p.value')),
+    color = paste("Diff. Expressed",
+              paste0("(FDR <= ",fdr,")"),sep = "\n")
+  )+
+  theme(
+    legend.position = "top"
+  )+
+  scale_color_brewer(palette = "Set1")+
+  scale_x_continuous(limits = c(-10,10))+
+  scale_y_continuous(limits = c(0,25))
+
+```
+
+### Alternative
+
+
+```{r nr_diff_expr_genes, fig.width=3,fig.height=2.8}
+
+noks_vs_ebv_NT %>% 
+  group_by(diff_expr) %>% tally() %>% 
+  ggplot(aes(x =  diff_expr))+
+  geom_col(aes(y = n),width = .5)+
+  geom_text(aes(y = n ,label = comma(n)), vjust= -.5)+
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none"
+  )+
+  labs(
+    y = paste("Number of diff. expr. genes",
+              paste0("(FDR <= ",fdr,")"),sep = "\n")
+  )+
+  scale_y_continuous(labels = comma_format(accuracy = 1e3),
+                     limits = c(0,16.8e3))
+
+```
+
+## Figure 4 
+
+I feel the same way about this figure as I do about the previous one. I am not completely sure about the argument here, but I think that probably we would like to see a Venn diagram comparing the 3 sets of differentially expressed genes or at least these two.
+
+```{r NT_vs_MC_volcano_plots,fig.align="default",fig.width=4,fig.height=4}
+
+scott_data$diff_genes_NOKS %<>%
+    mutate(diff_expr = if_else(padj <= fdr,"yes","no")) 
+
+scott_data$diff_genes_EBV %<>%
+    mutate(diff_expr = if_else(padj <= fdr,"yes","no")) 
+
+
+scott_data$diff_genes_NOKS %>% 
+  ggplot(aes(log2FoldChange,log10pval,colour = diff_expr))+
+  geom_point(alpha = .5,size =2)+
+  labs(
+    x = expression(log[2]('fold change')),
+    y = expression(-log[10]('p.value')),
+    color = paste("Diff. Expressed",
+              paste0("(FDR <= ",fdr,")"),sep = "\n"),
+    subtitle = "NOKS (NT vs. MC)",
+    title = "A"
+  )+
+  theme(
+    legend.position = "top",
+    plot.subtitle = element_text(hjust = .5, size = 12),
+    plot.title = element_text(size = 14)
+  )+
+  scale_color_brewer(palette = "Set1")+
+  scale_x_continuous(limits = c(-10,10))+
+  scale_y_continuous(limits = c(0,150))
+
+scott_data$diff_genes_EBV %>% 
+  mutate(diff_expr = if_else(padj <= fdr,"yes","no")) %>% 
+  ggplot(aes(log2FoldChange,log10pval,colour = diff_expr))+
+  geom_point(alpha = .5,size =2)+
+  labs(
+    x = expression(log[2]('fold change')),
+    y = expression(-log[10]('p.value')),
+    color = paste("Diff. Expressed",
+              paste0("(FDR <= ",fdr,")"),sep = "\n"),
+    subtitle = "NOKS AKATA (NT vs. MC)",
+    title = "B"
+  )+
+  theme(
+    legend.position = "top",
+    plot.subtitle = element_text(hjust = .5, size = 12),
+    plot.title = element_text(size = 14)
+  )+
+  scale_color_brewer(palette = "Set1")+
+  scale_x_continuous(limits = c(-10,10))+
+  scale_y_continuous(limits = c(0,150))
+
+
+
+
+```
+
+### Alternative
+
+
+```{r NT_vs_MC_barplots,fig.height=2.8,fig.width=4.5}
+
+NT_vs_MC_number_genes = 
+  tribble(
+    ~ cell, ~ genes,
+    "NOKS",scott_data$diff_genes_NOKS,
+    "NOKS AKATA", scott_data$diff_genes_EBV
+  ) %>% 
+  mutate(
+    genes = map(genes,group_by,diff_expr) %>% 
+      map(tally)
+  ) %>% 
+  unnest()
+
+NT_vs_MC_number_genes %>% 
+  ggplot(aes(x =  diff_expr))+
+  geom_col(aes(y = n),width = .5)+
+  geom_text(aes(y = n,label = comma(n)), vjust= -.5)+
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none"
+  )+
+  labs(
+    y = paste("Number of diff. expr. genes",
+              paste0("(FDR <= ",fdr,")"),sep = "\n")
+  )+
+  scale_y_continuous(labels = comma_format(accuracy = 1e3),
+                     limits = c(0,15e3))+
+  facet_grid( ~ cell)
+```
+
+### Venn diagram
+
+The venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below `r fdr`. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the $\log_2(\mbox{fold change}))$ sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.
+
+#### All diff. expressed genes
+
+```{r NT_vs_MC_venn}
+
+nt_vs_mc_venn = tribble(
+    ~ cell, ~ genes,
+    "NOKS",scott_data$diff_genes_NOKS,
+    "NOKS AKATA", scott_data$diff_genes_EBV
+  ) %>% 
+  unnest() %>% 
+  filter(padj <= fdr) %>% 
+  select(cell,gene_id) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"gene_id") %>% 
+  Venn()
+
+plot(nt_vs_mc_venn, show = list(Faces =  FALSE))
+
+```
+
+#### Upregulated
+
+```{r NT_vs_MC_upregulated_venn}
+
+nt_vs_mc_venn = tribble(
+    ~ cell, ~ genes,
+    "NOKS",scott_data$diff_genes_NOKS,
+    "NOKS AKATA", scott_data$diff_genes_EBV
+  ) %>% 
+  unnest() %>% 
+  filter(padj <= fdr & log2FoldChange > 0) %>% 
+  select(cell,gene_id) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"gene_id") %>% 
+  Venn()
+
+plot(nt_vs_mc_venn,show = list(Faces =  FALSE))
+
+
+```
+
+#### Downregulated
+
+```{r NT_vs_MC_downregulated_venn}
+
+nt_vs_mc_venn = tribble(
+    ~ cell, ~ genes,
+    "NOKS",scott_data$diff_genes_NOKS,
+    "NOKS AKATA", scott_data$diff_genes_EBV
+  ) %>% 
+  unnest() %>% 
+  filter(padj <= fdr & log2FoldChange < 0) %>% 
+  select(cell,gene_id) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"gene_id") %>% 
+  Venn()
+
+plot(nt_vs_mc_venn,show = list(Faces =  FALSE))
+
+
+```
+
 
 ## Figure 6A
 
-__Scott Fold change:__ The idea of this figure is two fold. a) 
+__Scott Fold change:__ The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) If possible quantify
 
 ```{r scott_fold_change}
 
@@ -81,6 +320,17 @@ __Scott Fold change:__ The idea of this figure is two fold. a)
 
 
 ```
+
+## Figure 6B?
+
+```{r new_fold_change}
+
+
+
+
+```
+
+
 
 
 # Supplement figures
@@ -103,6 +353,35 @@ scott_data$alignment %>%
     treat ~ cell
   )+
   geom_text_repel(aes(label = replicate))+
+  scale_x_continuous(labels = percent_format(accuracy = 1))+
+  scale_y_continuous(labels = comma_format(scale = 1e-6,suffix = "M"))+
+  labs(
+    x = "Percentage of aligned reads",
+    y = "Number of aligned reads"
+  )
+
+```
+
+## Supp. Fig 2
+
+__New data QC:__ We removed replicates 2 and 4 of $\Delta R \Delta Z$ because they were contaminated.
+
+```{r new_aligned_reads,fig.width = 7.5}
+
+new_data$alignment %>%
+  rename(treat = treatment) %>% 
+  mutate(
+    treat = if_else(treat == "none", "NT","MC") %>%
+      factor() %>% fct_rev(),
+    cell = factor(cell) %>% fct_rev(),
+    rep = paste0("rep",rep)
+  ) %>%
+  ggplot(aes(perc,aligned))+
+  geom_point()+
+  facet_grid(
+    treat ~ cell
+  )+
+  geom_text_repel(aes(label = rep))+
   scale_x_continuous(labels = percent_format(accuracy = 1))+
   scale_y_continuous(labels = comma_format(scale = 1e-6,suffix = "M"))+
   labs(

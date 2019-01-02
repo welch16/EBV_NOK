@@ -187,19 +187,65 @@ $(document).ready(function () {
 <div id="TOC">
 <ul>
 <li><a href="#main-figures">Main figures</a><ul>
+<li><a href="#fig-3a">Fig 3A</a></li>
+<li><a href="#figure-4">Figure 4</a></li>
 <li><a href="#figure-6a">Figure 6A</a></li>
+<li><a href="#figure-6b">Figure 6B?</a></li>
 </ul></li>
 <li><a href="#supplement-figures">Supplement figures</a><ul>
 <li><a href="#supp.-fig-1">Supp. Fig 1</a></li>
+<li><a href="#supp.-fig-2">Supp. Fig 2</a></li>
 </ul></li>
 </ul>
 </div>
 
 <div id="main-figures" class="section level1">
 <h1>Main figures</h1>
+<div id="fig-3a" class="section level2">
+<h2>Fig 3A</h2>
+<p>Mark mentioned that the idea of this figure is to show that there a not many genes being differentially expressed when comparing NOKS vs EBV. I think that unless we add more elements like:</p>
+<ol style="list-style-type: decimal">
+<li><p>Label genes of interest</p></li>
+<li><p>Add lines resembling the fold change values used for fig. 3B (which I am told is one of the criteria used to draw that figure)</p></li>
+</ol>
+<p>It only makes hardes for the reader to catch the point of the figure. For that purpose, I propose the figure below which compares the number of differentially expressed genes explicitely.</p>
+<p><img src="Figures_paper_files/figure-html/noks_vs_ebv_volcano_plot-1.png" width="480" style="display: block; margin: auto;" /></p>
+<div id="alternative" class="section level3">
+<h3>Alternative</h3>
+<p><img src="Figures_paper_files/figure-html/nr_diff_expr_genes-1.png" width="288" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="figure-4" class="section level2">
+<h2>Figure 4</h2>
+<p>I feel the same way about this figure as I do about the previous one. I am not completely sure about the argument here, but I think that probably we would like to see a Venn diagram comparing the 3 sets of differentially expressed genes or at least these two.</p>
+<p><img src="Figures_paper_files/figure-html/NT_vs_MC_volcano_plots-1.png" width="384" /><img src="Figures_paper_files/figure-html/NT_vs_MC_volcano_plots-2.png" width="384" /></p>
+<div id="alternative-1" class="section level3">
+<h3>Alternative</h3>
+<p><img src="Figures_paper_files/figure-html/NT_vs_MC_barplots-1.png" width="432" style="display: block; margin: auto;" /></p>
+</div>
+<div id="venn-diagram" class="section level3">
+<h3>Venn diagram</h3>
+<p>The venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below 0.001. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the <span class="math inline">\(\log_2(\mbox{fold change}))\)</span> sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.</p>
+<div id="all-diff.-expressed-genes" class="section level4">
+<h4>All diff. expressed genes</h4>
+<p><img src="Figures_paper_files/figure-html/NT_vs_MC_venn-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+<div id="upregulated" class="section level4">
+<h4>Upregulated</h4>
+<p><img src="Figures_paper_files/figure-html/NT_vs_MC_upregulated_venn-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+<div id="downregulated" class="section level4">
+<h4>Downregulated</h4>
+<p><img src="Figures_paper_files/figure-html/NT_vs_MC_downregulated_venn-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+</div>
 <div id="figure-6a" class="section level2">
 <h2>Figure 6A</h2>
-<p><strong>Scott Fold change:</strong> The idea of this figure is two fold. a)</p>
+<p><strong>Scott Fold change:</strong> The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) If possible quantify</p>
+</div>
+<div id="figure-6b" class="section level2">
+<h2>Figure 6B?</h2>
 </div>
 </div>
 <div id="supplement-figures" class="section level1">
@@ -208,6 +254,11 @@ $(document).ready(function () {
 <h2>Supp. Fig 1</h2>
 <p><strong>Scott data QC:</strong> We removed the EBV - NT first replicate due to lower quality.</p>
 <p><img src="Figures_paper_files/figure-html/scott_aligned_reads-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+<div id="supp.-fig-2" class="section level2">
+<h2>Supp. Fig 2</h2>
+<p><strong>New data QC:</strong> We removed replicates 2 and 4 of <span class="math inline">\(\Delta R \Delta Z\)</span> because they were contaminated.</p>
+<p><img src="Figures_paper_files/figure-html/new_aligned_reads-1.png" width="720" style="display: block; margin: auto;" /></p>
 </div>
 </div>
 
