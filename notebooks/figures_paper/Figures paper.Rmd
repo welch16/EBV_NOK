@@ -72,17 +72,20 @@ new_data = here("apps/Fig5_dashboard/fig5data.RData") %>%
 
 ```{r plot_rfuns}
 
-gene_expr_fold_change_plot <- function(DT,xvar,yvar,sc = 10)
+gene_expr_fold_change_plot <- function(DT,xvar,yvar,sc = 10,nbins = 50)
 {
   pal = viridis::viridis(1e3, option = "D")
   
-  ggplot(DT,aes_string(xvar,yvar))+stat_binhex(bins = 140) +
+  ggplot(DT,aes_string(xvar,yvar))+stat_binhex(bins = nbins) +
     scale_fill_gradientn(colours = pal,trans = "log10",
                          labels = trans_format('log10',math_format(10^.x)),
                          guide = guide_colourbar(title = NULL,
-                           barheight = unit(0.92,"npc"),
-                           barwidth = unit(0.05,"npc")))+
-    xlim(-sc,sc)+ylim(-sc,sc)    
+                           barheight = unit(0.5,"npc"),
+                           barwidth = unit(0.02,"npc")))+
+    xlim(-sc,sc)+ylim(-sc,sc)+
+    geom_hline(yintercept = 0,linetype = 2, colour = "black")+
+    geom_vline(xintercept = 0,linetype = 2,colour = "black")+
+    geom_abline(slope = 1,intercept = 0,linetype = 2, colour = "red")
 }
 
 
@@ -170,7 +173,7 @@ scott_data$diff_genes_NOKS %>%
     y = expression(-log[10]('p.value')),
     color = paste("Diff. Expressed",
               paste0("(FDR <= ",fdr,")"),sep = "\n"),
-    subtitle = "NOKS (NT vs. MC)",
+    subtitle = "NOKs (NT vs. MC)",
     title = "A"
   )+
   theme(
@@ -191,7 +194,7 @@ scott_data$diff_genes_EBV %>%
     y = expression(-log[10]('p.value')),
     color = paste("Diff. Expressed",
               paste0("(FDR <= ",fdr,")"),sep = "\n"),
-    subtitle = "NOKS AKATA (NT vs. MC)",
+    subtitle = "NOKs-AKATA (NT vs. MC)",
     title = "B"
   )+
   theme(
@@ -216,8 +219,8 @@ scott_data$diff_genes_EBV %>%
 NT_vs_MC_number_genes = 
   tribble(
     ~ cell, ~ genes,
-    "NOKS",scott_data$diff_genes_NOKS,
-    "NOKS AKATA", scott_data$diff_genes_EBV
+    "NOKs",scott_data$diff_genes_NOKS,
+    "NOKs-AKATA", scott_data$diff_genes_EBV
   ) %>% 
   mutate(
     genes = map(genes,group_by,diff_expr) %>% 
@@ -252,8 +255,8 @@ The venn diagrams below were constructed by defining a genes to be differentiall
 
 nt_vs_mc_venn = tribble(
     ~ cell, ~ genes,
-    "NOKS",scott_data$diff_genes_NOKS,
-    "NOKS AKATA", scott_data$diff_genes_EBV
+    "NOKs",scott_data$diff_genes_NOKS,
+    "NOKs-Akata", scott_data$diff_genes_EBV
   ) %>% 
   unnest() %>% 
   filter(padj <= fdr) %>% 
@@ -266,14 +269,17 @@ plot(nt_vs_mc_venn, show = list(Faces =  FALSE))
 
 ```
 
+
+
+
 #### Upregulated
 
 ```{r NT_vs_MC_upregulated_venn}
 
 nt_vs_mc_venn = tribble(
     ~ cell, ~ genes,
-    "NOKS",scott_data$diff_genes_NOKS,
-    "NOKS AKATA", scott_data$diff_genes_EBV
+    "NOKs",scott_data$diff_genes_NOKS,
+    "NOKs-Akata", scott_data$diff_genes_EBV
   ) %>% 
   unnest() %>% 
   filter(padj <= fdr & log2FoldChange > 0) %>% 
@@ -293,8 +299,8 @@ plot(nt_vs_mc_venn,show = list(Faces =  FALSE))
 
 nt_vs_mc_venn = tribble(
     ~ cell, ~ genes,
-    "NOKS",scott_data$diff_genes_NOKS,
-    "NOKS AKATA", scott_data$diff_genes_EBV
+    "NOKs",scott_data$diff_genes_NOKS,
+    "NOKs-Akata", scott_data$diff_genes_EBV
   ) %>% 
   unnest() %>% 
   filter(padj <= fdr & log2FoldChange < 0) %>% 
@@ -315,8 +321,37 @@ __Scott Fold change:__ The idea of this figure is two fold. a) Compare the MC ov
 
 ```{r scott_fold_change}
 
+scott_fc = scott_data$rsem_data %>% 
+  unnest() %>% 
+  mutate(treatment = if_else(treatment == "MC","MC","NT")) %>% 
+  select(file,cell,treatment,gene_id,TPM) %>% 
+  group_by(gene_id,cell,treatment) %>% 
+  summarize(
+    TPM = mean(TPM)
+  ) %>% 
+  spread(treatment,TPM) %>% 
+  mutate(
+    log2fc = log2((1 + MC)/ (1 + NT))
+  ) %>% 
+  select(-MC,-NT) %>% 
+  spread(cell,log2fc)
 
+update_geom_defaults("smooth", list(size = .5))
 
+fc_model = lm( EBV ~ 0 + NOKS , data = scott_fc)
+
+multcomp::glht(model = fc_model, linfct = c("NOKS = 1","NOKS = .77")) %>% 
+  summary()
+
+scott_fc %>% 
+  gene_expr_fold_change_plot("NOKS","EBV",sc = 8,nbins = 60)+
+  coord_fixed()+
+  labs(
+    x = "NOKs",
+    y = "NOKs-AKATA"
+  )+
+  geom_smooth(se = FALSE,method = "lm",formula = y ~ 0 + x,size = 1,
+              colour = "magenta",linetype = 2,size = .5)
 
 
 ```
