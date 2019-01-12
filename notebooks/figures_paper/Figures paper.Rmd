@@ -21,6 +21,7 @@ knitr::opts_chunk$set(echo = FALSE,eval = TRUE,
 library(here)
 library(rwlib)
 library(Vennerable)
+library(DESeq2)
 library(magrittr)
 library(tidyverse)
 library(scales)
@@ -36,6 +37,10 @@ conflict_prefer("col_factor","readr")
 conflict_prefer("discard","purrr")
 conflict_prefer("expand","tidyr")
 conflict_prefer("rename","dplyr")
+conflict_prefer("desc","dplyr")
+conflict_prefer("select","dplyr")
+
+
 
 theme_set(
   theme_bw()+
@@ -211,6 +216,8 @@ scott_data$diff_genes_EBV %>%
 
 ```
 
+
+
 ### Alternative
 
 
@@ -245,18 +252,14 @@ NT_vs_MC_number_genes %>%
   facet_grid( ~ cell)
 ```
 
-### Venn diagram
 
-The venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below `r fdr`. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the $\log_2(\mbox{fold change}))$ sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.
 
-#### All diff. expressed genes
-
-```{r NT_vs_MC_venn}
+```{r NT_vs_MC_venn,eval=FALSE}
 
 nt_vs_mc_venn = tribble(
     ~ cell, ~ genes,
     "NOKs",scott_data$diff_genes_NOKS,
-    "NOKs-Akata", scott_data$diff_genes_EBV
+    "NOKs-AKATA", scott_data$diff_genes_EBV
   ) %>% 
   unnest() %>% 
   filter(padj <= fdr) %>% 
@@ -270,16 +273,12 @@ plot(nt_vs_mc_venn, show = list(Faces =  FALSE))
 ```
 
 
-
-
-#### Upregulated
-
-```{r NT_vs_MC_upregulated_venn}
+```{r NT_vs_MC_upregulated_venn, eval=FALSE}
 
 nt_vs_mc_venn = tribble(
     ~ cell, ~ genes,
     "NOKs",scott_data$diff_genes_NOKS,
-    "NOKs-Akata", scott_data$diff_genes_EBV
+    "NOKs-AKATA", scott_data$diff_genes_EBV
   ) %>% 
   unnest() %>% 
   filter(padj <= fdr & log2FoldChange > 0) %>% 
@@ -293,14 +292,12 @@ plot(nt_vs_mc_venn,show = list(Faces =  FALSE))
 
 ```
 
-#### Downregulated
-
-```{r NT_vs_MC_downregulated_venn}
+```{r NT_vs_MC_downregulated_venn, eval=FALSE}
 
 nt_vs_mc_venn = tribble(
     ~ cell, ~ genes,
     "NOKs",scott_data$diff_genes_NOKS,
-    "NOKs-Akata", scott_data$diff_genes_EBV
+    "NOKs-AKATA", scott_data$diff_genes_EBV
   ) %>% 
   unnest() %>% 
   filter(padj <= fdr & log2FoldChange < 0) %>% 
@@ -314,7 +311,482 @@ plot(nt_vs_mc_venn,show = list(Faces =  FALSE))
 
 ```
 
+## Figure 5
 
+### Gene expression analysis
+
+To make this figure, we need to make some preparations. First, we need to find the genes that are differentially expressed by either the treatment or the cell lines.
+
+```{r scott_genes_diff , include=FALSE}
+
+as_matrix <- function(x)
+{
+  x %>% 
+    as.data.frame() %>% 
+    tibble::remove_rownames() %>% 
+    tibble::column_to_rownames("gene_id") %>% 
+    as.matrix()
+}
+
+count_matrix = scott_data %>% 
+  pluck("rsem_data") %>% 
+  select(file,rsem) %>% 
+  unnest() %>% 
+  select(file,gene_id,expected_count) %>% 
+  mutate(
+    expected_count = floor(expected_count)
+  ) %>% 
+  spread(file,expected_count) %>% 
+  as_matrix()
+
+coldata = scott_data %>% 
+  pluck("rsem_data") %>% 
+  select(file,cell,treatment) %>% 
+  mutate(interac = paste(cell,treatment, sep = ".")) %>% 
+  as.data.frame() %>% 
+  tibble::remove_rownames() %>% 
+  tibble::column_to_rownames("file")
+
+deseq = DESeqDataSetFromMatrix(
+  count_matrix,colData = coldata,
+  design = ~ interac
+)
+
+## remove genes with low read counts, filtered genes with no reads but probably can 
+## filter genes with low expression
+
+thr = 20
+
+deseq = deseq[ rowSums(assay(deseq) ) > thr,]
+deseq = DESeq(deseq)
+
+scott_data$diff_genes = results(
+  deseq,
+  cooksCutoff = FALSE,tidy = TRUE) %>% 
+  as_tibble() %>% 
+  dplyr::rename(
+    gene_id = row
+  ) %>% 
+  mutate(   ### changing the fold change and stat to be MC vs none
+    log2FoldChange = - log2FoldChange,
+    stat = -stat,           
+    log10pval = -log10(pvalue)
+  )
+
+nt_vs_mc = tribble(
+    ~ cell, ~ genes,
+    "Both",scott_data %>% pluck("diff_genes"),
+    "NOKs",scott_data %>% pluck("diff_genes_NOKS"),
+    "NOKs-AKATA", scott_data %>% pluck("diff_genes_EBV")
+  )
+
+```
+
+Since we were doing the volcano plots, it would be useful to examine it for this set of genes too.
+
+```{r volcano_default , fig.width=4,fig.height=4, warning=FALSE}
+
+scott_data$diff_genes %>% 
+  mutate(diff_expr = if_else(padj <= fdr,"yes","no")) %>% 
+  ggplot(aes(log2FoldChange,log10pval,colour = diff_expr))+
+  geom_point(alpha = .5,size =2)+
+  labs(
+    x = expression(log[2]('fold change')),
+    y = expression(-log[10]('p.value')),
+    color = paste("Diff. Expressed",
+              paste0("(FDR <= ",fdr,")"),sep = "\n")
+  )+
+  theme(
+    legend.position = "top",
+    plot.subtitle = element_text(hjust = .5, size = 12),
+    plot.title = element_text(size = 14)
+  )+
+  scale_color_brewer(palette = "Set1")+
+  scale_x_continuous(limits = c(-10,10))+
+  scale_y_continuous(limits = c(0,150))
+```
+
+```{r nr_scott_diff_genes,fig.width=3,fig.height=2.8}
+
+scott_data %>% 
+  pluck("diff_genes") %>% 
+  mutate(
+    diff_expr = if_else(padj <= fdr,"yes","no")
+  ) %>% 
+  group_by(diff_expr) %>% tally() %>% 
+  ggplot(aes(x =  diff_expr))+
+  geom_col(aes(y = n),width = .5)+
+  geom_text(aes(y = n ,label = comma(n)), vjust= -.5)+
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none"
+  )+
+  labs(
+    y = paste("Number of diff. expr. genes",
+              paste0("(FDR <= ",fdr,")"),sep = "\n")
+  )+
+  scale_y_continuous(labels = comma_format(accuracy = 1e3),
+                     limits = c(0,12e3))
+
+
+```
+
+### Venn diagram {.tabset .tabset-fade}
+
+The venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below `r fdr`. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the $\log_2(\mbox{fold change}))$ sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.
+
+I feel it is a bit odd that there are so many genes being differentially expressed with both cell lines, only NOKs, or only NOKs-AKATA. How are those genes shared?
+
+In the venn diagrams below, we consider the genes that are differentially expressed MC vs. NT:
+
+- Both: Means, when both cell lines are considered in the test
+- NOKs and NOKs-AKATA: Only one of those cell lines
+
+
+```{r plot_venn_color,include=FALSE,eval=TRUE}
+
+library(grid)
+
+
+plot_venn <- function(venn , colors)
+{
+  gp = VennThemes(venn)
+  
+  gp[["Face"]][[1]]$fill = "white"
+  gp[["Face"]][[2]]$fill = "white"
+  gp[["Face"]][[3]]$fill = "white"
+  gp[["Face"]][[4]]$fill = "white"
+  gp[["Face"]][[5]]$fill = "white"
+  gp[["Face"]][[6]]$fill = "white"
+  gp[["Face"]][[7]]$fill = "white"
+  gp[["Face"]][[8]]$fill = "white"
+  
+  
+  gp[["Set"]][[1]]$col = colors[1]
+  gp[["Set"]][[2]]$col = colors[2]
+  gp[["Set"]][[3]]$col = colors[3]
+
+  gp[["SetText"]][[1]]$col = colors[1]
+  gp[["SetText"]][[2]]$col = colors[2]
+  gp[["SetText"]][[3]]$col = colors[3]
+
+  
+  grid.newpage()
+  plot(venn,gp = gp)  
+}
+
+
+
+```
+
+
+#### All diff expressed genes
+
+```{r venn_all}
+
+nt_vs_mc_venn = nt_vs_mc %>% 
+  unnest() %>% 
+  filter(padj <= fdr) %>% 
+  select(cell,gene_id) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"gene_id") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)
+
+plot_venn(nt_vs_mc_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+```
+
+#### Upregulated
+
+```{r venn_upregulated}
+
+nt_vs_mc_venn = nt_vs_mc %>% 
+  unnest() %>% 
+  filter(padj <= fdr & log2FoldChange > 0) %>% 
+  select(cell,gene_id) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"gene_id") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)
+
+plot_venn(nt_vs_mc_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+```
+
+#### Downregulated
+
+```{r venn_downregulated}
+
+nt_vs_mc_venn = nt_vs_mc %>% 
+  unnest() %>% 
+  filter(padj <= fdr & log2FoldChange < 0) %>% 
+  select(cell,gene_id) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"gene_id") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)
+
+plot_venn(nt_vs_mc_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+```
+
+### Pathway analysis {.tabset .tabset-fade}
+
+```{r pathway_preparation}
+
+library(clusterProfiler)
+
+gmt_files =  here::here("data/Pathway") %>% 
+  list.files(full.names = TRUE,recursive = TRUE) %>% 
+  stri_subset("Intere") %>% 
+  stri_subset("kera") %>% 
+  set_names(
+    {
+      c("hallmark")
+    }
+  )
+
+gene_lists = tibble(
+ pathway_name = names(gmt_files), files = gmt_files
+) %>% 
+  mutate(
+    pathways = files %>% 
+      map(read.gmt) %>% map(as_tibble)
+  ) %>% 
+  dplyr::select(-files)
+
+
+
+
+name <- function(.x){
+  nms = pull(.x,symbol)
+  pull(.x,stat) %>% set_names(nms)
+}
+
+
+nt_vs_mc %<>%
+  mutate(
+    results = map(genes,separate,gene_id,into = c("ensembl","symbol"),sep = "_")) %>% 
+  mutate(
+    all_genes_list = map(results,arrange,desc(stat) ) %>% map(name),
+    diff_genes_list = map(results,filter,padj <= fdr) %>% 
+      map(arrange,desc(stat)) %>% map(name))
+
+
+nt_vs_mc %<>% crossing(.,gene_lists)
+
+nt_vs_mc %<>%
+  mutate(
+    all_genes_list_gsea = map2( all_genes_list, pathways,
+                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE)),
+    diff_genes_list_gsea = map2( diff_genes_list, pathways,
+                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE)))
+
+nt_vs_mc %<>% 
+  mutate_at(vars(contains("gsea")),
+            funs( res =  map(. , "result") %>% 
+                    map(as_tibble)))
+```
+
+
+```{r pathway_all_genes, fig.width= 10,fig.height=9}
+
+library(ggtech)
+
+nt_vs_mc %>% 
+  select(cell,all_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  group_by(ID) %>% 
+  summarize(NES = if_else(all(cell == "Both"), 0, median(NES[cell != "Both"]))) %>% 
+  ungroup() %>% 
+  arrange(NES) %>% 
+  pull(ID) -> all_ids
+
+nt_vs_mc %>% 
+  select(cell,all_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  mutate(
+    only_cell = if_else(str_detect(cell,"NOK"),1,2),
+    ID = factor(ID,levels = all_ids)
+  ) %>% 
+  ggplot(aes(x = NES,y = ID , color = cell))+
+  geom_point(size = 2)+
+  theme(legend.position = "top",
+        axis.title.y = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_blank())+
+  scale_color_tech(theme = "google")+
+  facet_grid(~ only_cell)+
+  geom_vline(xintercept = 0,linetype = 2)
+  
+
+```
+
+
+#### All pathways
+
+```{r venn_pathways_all}
+
+nt_vs_mc %>% 
+  select(cell,all_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  select(cell,ID) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"ID") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)-> pathway_venn
+
+
+plot_venn(pathway_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+
+```
+
+#### Upregulated pathways
+
+```{r venn_pathways_up}
+
+nt_vs_mc %>% 
+  select(cell,all_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  filter(NES > 0 ) %>% 
+  select(cell,ID) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"ID") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)-> pathway_venn
+
+
+plot_venn(pathway_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+
+```
+
+#### Downregulated pathways
+
+```{r venn_pathways_down}
+
+nt_vs_mc %>% 
+  select(cell,all_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  filter(NES < 0) %>% 
+  select(cell,ID) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"ID") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)-> pathway_venn
+
+
+plot_venn(pathway_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+
+```
+
+### Differentiated genes pathway analysis {.tabset .tabset-fade}
+
+If we only consider the genes that are differentially expressed (under our definition p.value < `r fdr`), it seems to be almost the same. If anything the number of meaningful pathways seems to be reduced, producing a more conservative pathway analysis (i.e. probably a bit of signal of non-differentially expressed genes is filtering).
+
+```{r pathway_diff_genes, fig.width= 10,fig.height=9}
+
+library(ggtech)
+
+nt_vs_mc %>% 
+  select(cell,diff_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  group_by(ID) %>% 
+  summarize(NES = if_else(all(cell == "Both"), 0, median(NES[cell != "Both"]))) %>% 
+  ungroup() %>% 
+  arrange(NES) %>% 
+  pull(ID) -> all_ids
+
+nt_vs_mc %>% 
+  select(cell,diff_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  mutate(
+    only_cell = if_else(str_detect(cell,"NOK"),1,2),
+    ID = factor(ID,levels = all_ids)
+  ) %>% 
+  ggplot(aes(x = NES,y = ID , color = cell))+
+  geom_point(size = 2)+
+  theme(legend.position = "top",
+        axis.title.y = element_blank(),
+        strip.background = element_blank(),
+        strip.text = element_blank())+
+  scale_color_tech(theme = "google")+
+  facet_grid(~ only_cell)+
+  geom_vline(xintercept = 0,linetype = 2)
+  
+
+```
+
+#### All pathways
+
+```{r diff_venn_pathways_all}
+
+nt_vs_mc %>% 
+  select(cell,diff_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  select(cell,ID) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"ID") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)-> pathway_venn
+
+
+plot_venn(pathway_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+
+```
+
+#### Upregulated pathways
+
+```{r diff_venn_pathways_up}
+
+nt_vs_mc %>% 
+  select(cell,diff_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  filter(NES > 0 ) %>% 
+  select(cell,ID) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"ID") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)-> pathway_venn
+
+
+plot_venn(pathway_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+
+```
+
+#### Downregulated pathways
+
+```{r diff_venn_pathways_down}
+
+nt_vs_mc %>% 
+  select(cell,diff_genes_list_gsea_res) %>% 
+  unnest() %>% 
+  filter(NES < 0) %>% 
+  select(cell,ID) %>% 
+  {split(.,.$cell)} %>% 
+  map(pluck,"ID") %>% 
+  Venn() %>% 
+  compute.Venn(doWeights = FALSE)-> pathway_venn
+
+
+plot_venn(pathway_venn,
+          colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
+
+
+```
 ## Figure 6A
 
 __Scott Fold change:__ The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) If possible quantify
@@ -355,17 +827,6 @@ scott_fc %>%
 
 
 ```
-
-## Figure 6B?
-
-```{r new_fold_change}
-
-
-
-
-```
-
-
 
 
 # Supplement figures
@@ -426,4 +887,26 @@ new_data$alignment %>%
 
 ```
 
+## Supp. Fig 3
+
+```{r pvalue_hist_scott,fig.width=4,fig.height=3,fig.align="default"}
+
+scott_data$diff_genes_EBV %>% 
+  ggplot(aes(pvalue))+
+  geom_histogram(colour = "black",fill = "white",boundary = 0)+
+  labs(
+    title = "A",
+    subtitle = "NOKs-AKATA"
+  )
+
+scott_data$diff_genes_NOKS %>% 
+  ggplot(aes(pvalue))+
+  geom_histogram(colour = "black",fill = "white",boundary = 0)+
+  labs(
+    title = "B",
+    subtitle = "NOKs"
+    )
+
+
+```
 

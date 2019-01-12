@@ -189,12 +189,12 @@ $(document).ready(function () {
 <li><a href="#main-figures">Main figures</a><ul>
 <li><a href="#fig-3a">Fig 3A</a></li>
 <li><a href="#figure-4">Figure 4</a></li>
-<li><a href="#figure-6a">Figure 6A</a></li>
-<li><a href="#figure-6b">Figure 6B?</a></li>
+<li><a href="#figure-5">Figure 5</a></li>
 </ul></li>
 <li><a href="#supplement-figures">Supplement figures</a><ul>
 <li><a href="#supp.-fig-1">Supp. Fig 1</a></li>
 <li><a href="#supp.-fig-2">Supp. Fig 2</a></li>
+<li><a href="#supp.-fig-3">Supp. Fig 3</a></li>
 </ul></li>
 </ul>
 </div>
@@ -223,29 +223,85 @@ $(document).ready(function () {
 <h3>Alternative</h3>
 <p><img src="Figures_paper_files/figure-html/NT_vs_MC_barplots-1.png" width="432" style="display: block; margin: auto;" /></p>
 </div>
-<div id="venn-diagram" class="section level3">
+</div>
+<div id="figure-5" class="section level2">
+<h2>Figure 5</h2>
+<div id="gene-expression-analysis" class="section level3">
+<h3>Gene expression analysis</h3>
+<p>To make this figure, we need to make some preparations. First, we need to find the genes that are differentially expressed by either the treatment or the cell lines.</p>
+<p>Since we were doing the volcano plots, it would be useful to examine it for this set of genes too.</p>
+<p><img src="Figures_paper_files/figure-html/volcano_default%20-1.png" width="384" style="display: block; margin: auto;" /></p>
+<p><img src="Figures_paper_files/figure-html/nr_scott_diff_genes-1.png" width="288" style="display: block; margin: auto;" /></p>
+</div>
+<div id="venn-diagram" class="section level3 tabset tabset-fade">
 <h3>Venn diagram</h3>
 <p>The venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below 0.001. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the <span class="math inline">\(\log_2(\mbox{fold change}))\)</span> sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.</p>
-<div id="all-diff.-expressed-genes" class="section level4">
-<h4>All diff. expressed genes</h4>
-<p><img src="Figures_paper_files/figure-html/NT_vs_MC_venn-1.png" width="480" style="display: block; margin: auto;" /></p>
+<p>I feel it is a bit odd that there are so many genes being differentially expressed with both cell lines, only NOKs, or only NOKs-AKATA. How are those genes shared?</p>
+<p>In the venn diagrams below, we consider the genes that are differentially expressed MC vs. NT:</p>
+<ul>
+<li>Both: Means, when both cell lines are considered in the test</li>
+<li>NOKs and NOKs-AKATA: Only one of those cell lines</li>
+</ul>
+<div id="all-diff-expressed-genes" class="section level4">
+<h4>All diff expressed genes</h4>
+<p><img src="Figures_paper_files/figure-html/venn_all-1.png" width="480" style="display: block; margin: auto;" /></p>
 </div>
 <div id="upregulated" class="section level4">
 <h4>Upregulated</h4>
-<p><img src="Figures_paper_files/figure-html/NT_vs_MC_upregulated_venn-1.png" width="480" style="display: block; margin: auto;" /></p>
+<p><img src="Figures_paper_files/figure-html/venn_upregulated-1.png" width="480" style="display: block; margin: auto;" /></p>
 </div>
 <div id="downregulated" class="section level4">
 <h4>Downregulated</h4>
-<p><img src="Figures_paper_files/figure-html/NT_vs_MC_downregulated_venn-1.png" width="480" style="display: block; margin: auto;" /></p>
+<p><img src="Figures_paper_files/figure-html/venn_downregulated-1.png" width="480" style="display: block; margin: auto;" /></p>
 </div>
 </div>
+<div id="pathway-analysis" class="section level3 tabset tabset-fade">
+<h3>Pathway analysis</h3>
+<p><img src="Figures_paper_files/figure-html/pathway_all_genes-1.png" width="960" style="display: block; margin: auto;" /></p>
+<div id="all-pathways" class="section level4">
+<h4>All pathways</h4>
+<p><img src="Figures_paper_files/figure-html/venn_pathways_all-1.png" width="480" style="display: block; margin: auto;" /></p>
 </div>
-<div id="figure-6a" class="section level2">
-<h2>Figure 6A</h2>
+<div id="upregulated-pathways" class="section level4">
+<h4>Upregulated pathways</h4>
+<p><img src="Figures_paper_files/figure-html/venn_pathways_up-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+<div id="downregulated-pathways" class="section level4">
+<h4>Downregulated pathways</h4>
+<p><img src="Figures_paper_files/figure-html/venn_pathways_down-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="differentiated-genes-pathway-analysis" class="section level3 tabset tabset-fade">
+<h3>Differentiated genes pathway analysis</h3>
+<p>If we only consider the genes that are differentially expressed (under our definition p.value &lt; 0.001), it seems to be almost the same. If anything the number of meaningful pathways seems to be reduced, producing a more conservative pathway analysis (i.e. probably a bit of signal of non-differentially expressed genes is filtering).</p>
+<p><img src="Figures_paper_files/figure-html/pathway_diff_genes-1.png" width="960" style="display: block; margin: auto;" /></p>
+<div id="all-pathways-1" class="section level4">
+<h4>All pathways</h4>
+<p><img src="Figures_paper_files/figure-html/diff_venn_pathways_all-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+<div id="upregulated-pathways-1" class="section level4">
+<h4>Upregulated pathways</h4>
+<p><img src="Figures_paper_files/figure-html/diff_venn_pathways_up-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+<div id="downregulated-pathways-1" class="section level4">
+<h4>Downregulated pathways</h4>
+<p><img src="Figures_paper_files/figure-html/diff_venn_pathways_down-1.png" width="480" style="display: block; margin: auto;" /> ## Figure 6A</p>
 <p><strong>Scott Fold change:</strong> The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) If possible quantify</p>
+<pre><code>## 
+##   Simultaneous Tests for General Linear Hypotheses
+## 
+## Fit: lm(formula = EBV ~ 0 + NOKS, data = scott_fc)
+## 
+## Linear Hypotheses:
+##              Estimate Std. Error  t value Pr(&gt;|t|)    
+## NOKS == 1    0.750509   0.002312 -107.927 2.22e-16 ***
+## NOKS == 0.77 0.750509   0.002312   -8.432  &lt; 2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## (Adjusted p values reported -- single-step method)</code></pre>
+<p><img src="Figures_paper_files/figure-html/scott_fold_change-1.png" width="480" style="display: block; margin: auto;" /></p>
 </div>
-<div id="figure-6b" class="section level2">
-<h2>Figure 6B?</h2>
+</div>
 </div>
 </div>
 <div id="supplement-figures" class="section level1">
@@ -259,6 +315,10 @@ $(document).ready(function () {
 <h2>Supp. Fig 2</h2>
 <p><strong>New data QC:</strong> We removed replicates 2 and 4 of <span class="math inline">\(\Delta R \Delta Z\)</span> because they were contaminated.</p>
 <p><img src="Figures_paper_files/figure-html/new_aligned_reads-1.png" width="720" style="display: block; margin: auto;" /></p>
+</div>
+<div id="supp.-fig-3" class="section level2">
+<h2>Supp. Fig 3</h2>
+<p><img src="Figures_paper_files/figure-html/pvalue_hist_scott-1.png" width="384" /><img src="Figures_paper_files/figure-html/pvalue_hist_scott-2.png" width="384" /></p>
 </div>
 </div>
 
