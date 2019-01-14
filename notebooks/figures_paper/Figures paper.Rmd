@@ -104,7 +104,7 @@ Mark mentioned that the idea of this figure is to show that there a not many gen
 
 2. Add lines resembling the fold change values used for fig. 3B (which I am told is one of the criteria used to draw that figure)
 
-It only makes hardes for the reader to catch the point of the figure. For that purpose, I propose the figure below which compares the number of differentially expressed genes explicitely.
+It only makes harder for the reader to catch the point of the figure. For that purpose, I propose the figure below which compares the number of differentially expressed genes explicitly.
 
 
 ```{r noks_vs_ebv_volcano_plot}
@@ -406,6 +406,8 @@ scott_data$diff_genes %>%
   scale_y_continuous(limits = c(0,150))
 ```
 
+Under the same argument as before, I think this could be an alternative to the figure above:
+
 ```{r nr_scott_diff_genes,fig.width=3,fig.height=2.8}
 
 scott_data %>% 
@@ -433,11 +435,11 @@ scott_data %>%
 
 ### Venn diagram {.tabset .tabset-fade}
 
-The venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below `r fdr`. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the $\log_2(\mbox{fold change}))$ sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.
+The Venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below `r fdr`. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the $\log_2(\mbox{fold change}))$ sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.
 
 I feel it is a bit odd that there are so many genes being differentially expressed with both cell lines, only NOKs, or only NOKs-AKATA. How are those genes shared?
 
-In the venn diagrams below, we consider the genes that are differentially expressed MC vs. NT:
+In the Venn diagrams below, we consider the genes that are differentially expressed MC vs. NT:
 
 - Both: Means, when both cell lines are considered in the test
 - NOKs and NOKs-AKATA: Only one of those cell lines
@@ -536,6 +538,8 @@ plot_venn(nt_vs_mc_venn,
 
 ### Pathway analysis {.tabset .tabset-fade}
 
+I had a bit of trouble generating the plot below using bars, so I thought to use points as it looks cleaner. I added the Venn diagrams as possible plots for the supplement. Something that I found interesting, although not surprising, is that the Venn diagrams are a bit similar at both gene and pathway levels.
+
 ```{r pathway_preparation}
 
 library(clusterProfiler)
@@ -559,14 +563,10 @@ gene_lists = tibble(
   ) %>% 
   dplyr::select(-files)
 
-
-
-
 name <- function(.x){
   nms = pull(.x,symbol)
   pull(.x,stat) %>% set_names(nms)
 }
-
 
 nt_vs_mc %<>%
   mutate(
@@ -682,7 +682,6 @@ nt_vs_mc %>%
   Venn() %>% 
   compute.Venn(doWeights = FALSE)-> pathway_venn
 
-
 plot_venn(pathway_venn,
           colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
 
@@ -691,7 +690,7 @@ plot_venn(pathway_venn,
 
 ### Differentiated genes pathway analysis {.tabset .tabset-fade}
 
-If we only consider the genes that are differentially expressed (under our definition p.value < `r fdr`), it seems to be almost the same. If anything the number of meaningful pathways seems to be reduced, producing a more conservative pathway analysis (i.e. probably a bit of signal of non-differentially expressed genes is filtering).
+If we only consider the genes that are differentially expressed (under our definition p.value < `r fdr`), it seems to be almost the same. If anything the number of meaningful pathways seems to be reduced, producing a more conservative pathway analysis (i.e. probably a bit of signal of non-differentially expressed genes is filtering). However, it is not surprising because the GSEA test works by examining the tails of the signal to noise ratio, which are almost the same between both analysis because the number of differentially expressed genes is very high.
 
 ```{r pathway_diff_genes, fig.width= 10,fig.height=9}
 
@@ -760,7 +759,6 @@ nt_vs_mc %>%
   Venn() %>% 
   compute.Venn(doWeights = FALSE)-> pathway_venn
 
-
 plot_venn(pathway_venn,
           colors = c("#5380E4", "#E12A3C", "#FFBF03")) 
 
@@ -787,11 +785,18 @@ plot_venn(pathway_venn,
 
 
 ```
+
+
 ## Figure 6A
 
-__Scott Fold change:__ The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) If possible quantify
+__Scott Fold change:__ The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) Quantify the ratio between cell fold changes. 
 
-```{r scott_fold_change}
+For b), we considered the $y  = \beta x + \epsilon$ model, where $x$ and $y$ are the $\log_2 \left(\frac{1 + \mbox{mean MC TPM}}{mean NT TPM}\right)$ for the NOKs, and NOKs-AKATA samples respectively. Below, we calculated the $H_0: \beta = 1$ test, representing that 
+
+
+
+
+```{r scott_fold_change, results='hold'}
 
 scott_fc = scott_data$rsem_data %>% 
   unnest() %>% 
@@ -808,13 +813,6 @@ scott_fc = scott_data$rsem_data %>%
   select(-MC,-NT) %>% 
   spread(cell,log2fc)
 
-update_geom_defaults("smooth", list(size = .5))
-
-fc_model = lm( EBV ~ 0 + NOKS , data = scott_fc)
-
-multcomp::glht(model = fc_model, linfct = c("NOKS = 1","NOKS = .77")) %>% 
-  summary()
-
 scott_fc %>% 
   gene_expr_fold_change_plot("NOKS","EBV",sc = 8,nbins = 60)+
   coord_fixed()+
@@ -825,6 +823,89 @@ scott_fc %>%
   geom_smooth(se = FALSE,method = "lm",formula = y ~ 0 + x,size = 1,
               colour = "magenta",linetype = 2,size = .5)
 
+update_geom_defaults("smooth", list(size = .5))
+
+fc_model = lm( EBV ~ 0 + NOKS , data = scott_fc)
+
+multcomp::glht(model = fc_model, linfct = c("NOKS = 1")) %>% 
+  summary()
+
+
+```
+
+### Fig 6B (or supplement)
+
+We repeated the previous analysis, but by keeping only the genes that are differentially expressed by cell or treatment (i.e. the 'Both' group). In magenta, we observe the slope obtained by considering only the differentially expressed genes, and in orange we observe the linear relationship by restricting the genes by their regulation (i.e. NOKs > 0 and NOKs-AKATA > 0 and NOKs < 0 and NOKs-AKATA < 0 ).
+
+```{r scott_fold_change_diff, results='hold'}
+
+scott_fc_diff = scott_fc %>% 
+  inner_join(
+    scott_data %>% pluck("diff_genes") %>% select(gene_id,log2FoldChange,padj),by = "gene_id"
+  )  %>% 
+  filter(padj < fdr)
+  
+scott_fc_diff %>% 
+  gene_expr_fold_change_plot("NOKS","EBV",sc = 8,nbins = 60)+
+  coord_fixed()+
+  labs(
+    x = "NOKs",
+    y = "NOKs-AKATA"
+  )+
+  geom_smooth(se = FALSE,method = "lm",formula = y ~ 0 + x,size = 1,
+              colour = "magenta",linetype = 2,size = .5)+
+  geom_smooth(se = FALSE,method = "lm",formula = y ~ 0 + x,size = 1,
+              colour = "orange",linetype = 2,size = .5,
+              data = filter(scott_fc_diff, EBV > 0 & NOKS > 0))+
+  geom_smooth(se = FALSE,method = "lm",formula = y ~ 0 + x,size = 1,
+              colour = "orange",linetype = 2,size = .5,
+              data = filter(scott_fc_diff, EBV < 0 & NOKS < 0))
+
+fc_model = lm( EBV ~ 0 + NOKS , data = scott_fc_diff)
+
+multcomp::glht(model = fc_model, linfct = c("NOKS = 1")) %>% 
+  summary()
+
+
+```
+
+In the figure above, the genes appear to be clustered into two groups (i.e. genes that are up and down-regulated), thus, we fit the same linear model but restricting the differentially expressed genes by the regulation sign. This is barely noticeable in the plot
+
+```{r diff_up_model, include=TRUE,eval=TRUE}
+
+fc_model_up = lm( EBV ~ 0 + NOKS , 
+                  data = scott_fc_diff %>% filter(EBV > 0 & NOKS > 0))
+
+multcomp::glht(model = fc_model_up, linfct = c("NOKS = 1")) %>% 
+  summary()
+
+
+```
+```{r diff_down_model, include=TRUE,eval=TRUE}
+
+fc_model_up = lm( EBV ~ 0 + NOKS , 
+                  data = scott_fc_diff %>% filter(EBV < 0 & NOKS < 0 ))
+
+multcomp::glht(model = fc_model_up, linfct = c("NOKS = 1")) %>% 
+  summary()
+
+
+```
+
+First, we can notice that the when the genes are down-regulated the ratio between NOKs-AKATA and NOKS fold change is more similar to the ratio obtained when considering all the genes (0.75), than  the ratio when considering only the differentially expressed genes (0.79). The table below, illustrates the number of genes in each regulation block:
+
+```{r ngenes_table,include=TRUE,eval=TRUE}
+
+scott_fc_diff %>% 
+  mutate(
+    regulation = case_when(
+      EBV > 0 & NOKS > 0 ~ "Both up" ,
+      EBV < 0 & NOKS < 0 ~ "Both down",
+      EBV > 0 & NOKS < 0 ~ "EBV up and NOKS down",
+      EBV < 0 & NOKS > 0 ~ "EBV down and NOKS up"
+    ) ) %>% 
+  group_by(regulation) %>% tally() %>% 
+  knitr::kable(digits = 0)
 
 ```
 
@@ -858,11 +939,11 @@ scott_data$alignment %>%
 
 ```
 
-## Supp. Fig 2
+<!-- ## Supp. Fig 2 -->
 
-__New data QC:__ We removed replicates 2 and 4 of $\Delta R \Delta Z$ because they were contaminated.
+<!-- __New data QC:__ We removed replicates 2 and 4 of $\Delta R \Delta Z$ because they were contaminated. -->
 
-```{r new_aligned_reads,fig.width = 7.5}
+```{r new_aligned_reads,fig.width = 7.5,include=FALSE,eval=FALSE}
 
 new_data$alignment %>%
   rename(treat = treatment) %>% 
@@ -887,24 +968,34 @@ new_data$alignment %>%
 
 ```
 
-## Supp. Fig 3
+## Supp. Fig 2
+
+
 
 ```{r pvalue_hist_scott,fig.width=4,fig.height=3,fig.align="default"}
+
+scott_data$diff_genes %>% 
+  ggplot(aes(pvalue))+
+  geom_histogram(colour = "black",fill = "white",boundary = 0)+
+  labs(
+    title = "A",
+    subtitle = "NT vs. MC"
+  )
 
 scott_data$diff_genes_EBV %>% 
   ggplot(aes(pvalue))+
   geom_histogram(colour = "black",fill = "white",boundary = 0)+
   labs(
-    title = "A",
-    subtitle = "NOKs-AKATA"
+    title = "B",
+    subtitle = "NOKs-AKATA: NT vs. MC"
   )
 
 scott_data$diff_genes_NOKS %>% 
   ggplot(aes(pvalue))+
   geom_histogram(colour = "black",fill = "white",boundary = 0)+
   labs(
-    title = "B",
-    subtitle = "NOKs"
+    title = "C",
+    subtitle = "NOKs: NT vs. MC"
     )
 
 

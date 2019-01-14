@@ -190,11 +190,11 @@ $(document).ready(function () {
 <li><a href="#fig-3a">Fig 3A</a></li>
 <li><a href="#figure-4">Figure 4</a></li>
 <li><a href="#figure-5">Figure 5</a></li>
+<li><a href="#figure-6a">Figure 6A</a></li>
 </ul></li>
 <li><a href="#supplement-figures">Supplement figures</a><ul>
 <li><a href="#supp.-fig-1">Supp. Fig 1</a></li>
 <li><a href="#supp.-fig-2">Supp. Fig 2</a></li>
-<li><a href="#supp.-fig-3">Supp. Fig 3</a></li>
 </ul></li>
 </ul>
 </div>
@@ -208,7 +208,7 @@ $(document).ready(function () {
 <li><p>Label genes of interest</p></li>
 <li><p>Add lines resembling the fold change values used for fig. 3B (which I am told is one of the criteria used to draw that figure)</p></li>
 </ol>
-<p>It only makes hardes for the reader to catch the point of the figure. For that purpose, I propose the figure below which compares the number of differentially expressed genes explicitely.</p>
+<p>It only makes harder for the reader to catch the point of the figure. For that purpose, I propose the figure below which compares the number of differentially expressed genes explicitly.</p>
 <p><img src="Figures_paper_files/figure-html/noks_vs_ebv_volcano_plot-1.png" width="480" style="display: block; margin: auto;" /></p>
 <div id="alternative" class="section level3">
 <h3>Alternative</h3>
@@ -231,13 +231,14 @@ $(document).ready(function () {
 <p>To make this figure, we need to make some preparations. First, we need to find the genes that are differentially expressed by either the treatment or the cell lines.</p>
 <p>Since we were doing the volcano plots, it would be useful to examine it for this set of genes too.</p>
 <p><img src="Figures_paper_files/figure-html/volcano_default%20-1.png" width="384" style="display: block; margin: auto;" /></p>
+<p>Under the same argument as before, I think this could be an alternative to the figure above:</p>
 <p><img src="Figures_paper_files/figure-html/nr_scott_diff_genes-1.png" width="288" style="display: block; margin: auto;" /></p>
 </div>
 <div id="venn-diagram" class="section level3 tabset tabset-fade">
 <h3>Venn diagram</h3>
-<p>The venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below 0.001. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the <span class="math inline">\(\log_2(\mbox{fold change}))\)</span> sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.</p>
+<p>The Venn diagrams below were constructed by defining a genes to be differentially expressed iff the adjust p.values were below 0.001. First, we compared all genes and noticed that a lot of genes are being differentially expressed regardless of the cell line. However, when the genes are divided by the regulation sign ( i.e. the <span class="math inline">\(\log_2(\mbox{fold change}))\)</span> sign) we can notice that the same pattern holds, thus an apparent conclusion is that there is not a pattern respect to this sign. I think we should use this to motivate the pathway analysis.</p>
 <p>I feel it is a bit odd that there are so many genes being differentially expressed with both cell lines, only NOKs, or only NOKs-AKATA. How are those genes shared?</p>
-<p>In the venn diagrams below, we consider the genes that are differentially expressed MC vs. NT:</p>
+<p>In the Venn diagrams below, we consider the genes that are differentially expressed MC vs. NT:</p>
 <ul>
 <li>Both: Means, when both cell lines are considered in the test</li>
 <li>NOKs and NOKs-AKATA: Only one of those cell lines</li>
@@ -257,6 +258,7 @@ $(document).ready(function () {
 </div>
 <div id="pathway-analysis" class="section level3 tabset tabset-fade">
 <h3>Pathway analysis</h3>
+<p>I had a bit of trouble generating the plot below using bars, so I thought to use points as it looks cleaner. I added the Venn diagrams as possible plots for the supplement. Something that I found interesting, although not surprising, is that the Venn diagrams are a bit similar at both gene and pathway levels.</p>
 <p><img src="Figures_paper_files/figure-html/pathway_all_genes-1.png" width="960" style="display: block; margin: auto;" /></p>
 <div id="all-pathways" class="section level4">
 <h4>All pathways</h4>
@@ -273,7 +275,7 @@ $(document).ready(function () {
 </div>
 <div id="differentiated-genes-pathway-analysis" class="section level3 tabset tabset-fade">
 <h3>Differentiated genes pathway analysis</h3>
-<p>If we only consider the genes that are differentially expressed (under our definition p.value &lt; 0.001), it seems to be almost the same. If anything the number of meaningful pathways seems to be reduced, producing a more conservative pathway analysis (i.e. probably a bit of signal of non-differentially expressed genes is filtering).</p>
+<p>If we only consider the genes that are differentially expressed (under our definition p.value &lt; 0.001), it seems to be almost the same. If anything the number of meaningful pathways seems to be reduced, producing a more conservative pathway analysis (i.e. probably a bit of signal of non-differentially expressed genes is filtering). However, it is not surprising because the GSEA test works by examining the tails of the signal to noise ratio, which are almost the same between both analysis because the number of differentially expressed genes is very high.</p>
 <p><img src="Figures_paper_files/figure-html/pathway_diff_genes-1.png" width="960" style="display: block; margin: auto;" /></p>
 <div id="all-pathways-1" class="section level4">
 <h4>All pathways</h4>
@@ -285,22 +287,93 @@ $(document).ready(function () {
 </div>
 <div id="downregulated-pathways-1" class="section level4">
 <h4>Downregulated pathways</h4>
-<p><img src="Figures_paper_files/figure-html/diff_venn_pathways_down-1.png" width="480" style="display: block; margin: auto;" /> ## Figure 6A</p>
-<p><strong>Scott Fold change:</strong> The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) If possible quantify</p>
+<p><img src="Figures_paper_files/figure-html/diff_venn_pathways_down-1.png" width="480" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+</div>
+<div id="figure-6a" class="section level2">
+<h2>Figure 6A</h2>
+<p><strong>Scott Fold change:</strong> The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) Quantify the ratio between cell fold changes.</p>
+<p>For b), we considered the <span class="math inline">\(y = \beta x + \epsilon\)</span> model, where <span class="math inline">\(x\)</span> and <span class="math inline">\(y\)</span> are the <span class="math inline">\(\log_2 \left(\frac{1 + \mbox{mean MC TPM}}{mean NT TPM}\right)\)</span> for the NOKs, and NOKs-AKATA samples respectively. Below, we calculated the <span class="math inline">\(H_0: \beta = 1\)</span> test, representing that</p>
+<p><img src="Figures_paper_files/figure-html/scott_fold_change-1.png" width="480" style="display: block; margin: auto;" /></p>
 <pre><code>## 
 ##   Simultaneous Tests for General Linear Hypotheses
 ## 
 ## Fit: lm(formula = EBV ~ 0 + NOKS, data = scott_fc)
 ## 
 ## Linear Hypotheses:
-##              Estimate Std. Error  t value Pr(&gt;|t|)    
-## NOKS == 1    0.750509   0.002312 -107.927 2.22e-16 ***
-## NOKS == 0.77 0.750509   0.002312   -8.432  &lt; 2e-16 ***
+##           Estimate Std. Error t value Pr(&gt;|t|)    
+## NOKS == 1 0.750509   0.002312  -107.9   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## (Adjusted p values reported -- single-step method)</code></pre>
-<p><img src="Figures_paper_files/figure-html/scott_fold_change-1.png" width="480" style="display: block; margin: auto;" /></p>
-</div>
+<div id="fig-6b-or-supplement" class="section level3">
+<h3>Fig 6B (or supplement)</h3>
+<p>We repeated the previous analysis, but by keeping only the genes that are differentially expressed by cell or treatment (i.e. the ‘Both’ group). In magenta, we observe the slope obtained by considering only the differentially expressed genes, and in orange we observe the linear relationship by restricting the genes by their regulation (i.e. NOKs &gt; 0 and NOKs-AKATA &gt; 0 and NOKs &lt; 0 and NOKs-AKATA &lt; 0 ).</p>
+<p><img src="Figures_paper_files/figure-html/scott_fold_change_diff-1.png" width="480" style="display: block; margin: auto;" /></p>
+<pre><code>## 
+##   Simultaneous Tests for General Linear Hypotheses
+## 
+## Fit: lm(formula = EBV ~ 0 + NOKS, data = scott_fc_diff)
+## 
+## Linear Hypotheses:
+##           Estimate Std. Error t value Pr(&gt;|t|)    
+## NOKS == 1 0.797328   0.003247  -62.41   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## (Adjusted p values reported -- single-step method)</code></pre>
+<p>In the figure above, the genes appear to be clustered into two groups (i.e. genes that are up and down-regulated), thus, we fit the same linear model but restricting the differentially expressed genes by the regulation sign. This is barely noticeable in the plot</p>
+<pre><code>## 
+##   Simultaneous Tests for General Linear Hypotheses
+## 
+## Fit: lm(formula = EBV ~ 0 + NOKS, data = scott_fc_diff %&gt;% filter(EBV &gt; 
+##     0 &amp; NOKS &gt; 0))
+## 
+## Linear Hypotheses:
+##           Estimate Std. Error t value Pr(&gt;|t|)    
+## NOKS == 1 0.837190   0.004846   -33.6   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## (Adjusted p values reported -- single-step method)</code></pre>
+<pre><code>## 
+##   Simultaneous Tests for General Linear Hypotheses
+## 
+## Fit: lm(formula = EBV ~ 0 + NOKS, data = scott_fc_diff %&gt;% filter(EBV &lt; 
+##     0 &amp; NOKS &lt; 0))
+## 
+## Linear Hypotheses:
+##           Estimate Std. Error t value Pr(&gt;|t|)    
+## NOKS == 1 0.743457   0.003857  -66.51   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## (Adjusted p values reported -- single-step method)</code></pre>
+<p>First, we can notice that the when the genes are down-regulated the ratio between NOKs-AKATA and NOKS fold change is more similar to the ratio obtained when considering all the genes (0.75), than the ratio when considering only the differentially expressed genes (0.79). The table below, illustrates the number of genes in each regulation block:</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">regulation</th>
+<th align="right">n</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left">Both down</td>
+<td align="right">2368</td>
+</tr>
+<tr class="even">
+<td align="left">Both up</td>
+<td align="right">2294</td>
+</tr>
+<tr class="odd">
+<td align="left">EBV down and NOKS up</td>
+<td align="right">9</td>
+</tr>
+<tr class="even">
+<td align="left">EBV up and NOKS down</td>
+<td align="right">45</td>
+</tr>
+</tbody>
+</table>
 </div>
 </div>
 </div>
@@ -310,15 +383,12 @@ $(document).ready(function () {
 <h2>Supp. Fig 1</h2>
 <p><strong>Scott data QC:</strong> We removed the EBV - NT first replicate due to lower quality.</p>
 <p><img src="Figures_paper_files/figure-html/scott_aligned_reads-1.png" width="480" style="display: block; margin: auto;" /></p>
+<!-- ## Supp. Fig 2 -->
+<!-- __New data QC:__ We removed replicates 2 and 4 of $\Delta R \Delta Z$ because they were contaminated. -->
 </div>
 <div id="supp.-fig-2" class="section level2">
 <h2>Supp. Fig 2</h2>
-<p><strong>New data QC:</strong> We removed replicates 2 and 4 of <span class="math inline">\(\Delta R \Delta Z\)</span> because they were contaminated.</p>
-<p><img src="Figures_paper_files/figure-html/new_aligned_reads-1.png" width="720" style="display: block; margin: auto;" /></p>
-</div>
-<div id="supp.-fig-3" class="section level2">
-<h2>Supp. Fig 3</h2>
-<p><img src="Figures_paper_files/figure-html/pvalue_hist_scott-1.png" width="384" /><img src="Figures_paper_files/figure-html/pvalue_hist_scott-2.png" width="384" /></p>
+<p><img src="Figures_paper_files/figure-html/pvalue_hist_scott-1.png" width="384" /><img src="Figures_paper_files/figure-html/pvalue_hist_scott-2.png" width="384" /><img src="Figures_paper_files/figure-html/pvalue_hist_scott-3.png" width="384" /></p>
 </div>
 </div>
 
