@@ -19,6 +19,7 @@ knitr::opts_chunk$set(echo = FALSE,eval = TRUE,
                       fig.align = "center")
 
 library(here)
+library(cowplot)
 library(rwlib)
 library(Vennerable)
 library(DESeq2)
@@ -116,7 +117,7 @@ noks_vs_ebv_NT %<>%
     diff_expr = if_else(padj <= fdr,"yes","no")
   )
 
-noks_vs_ebv_NT %>% 
+noks_vs_ebv_NT_plot = noks_vs_ebv_NT %>% 
   ggplot(aes(log2FoldChange,-log10(pvalue),colour = diff_expr))+
   geom_point(alpha = .5,size =2)+
   labs(
@@ -130,7 +131,9 @@ noks_vs_ebv_NT %>%
   )+
   scale_color_brewer(palette = "Set1")+
   scale_x_continuous(limits = c(-10,10))+
-  scale_y_continuous(limits = c(0,25))
+  scale_y_continuous(limits = c(0,150))
+
+noks_vs_ebv_NT_plot
 
 ```
 
@@ -139,9 +142,9 @@ noks_vs_ebv_NT %>%
 
 ```{r nr_diff_expr_genes, fig.width=3,fig.height=2.8}
 
-noks_vs_ebv_NT %>% 
+noks_vs_ebv_NT_barplot = noks_vs_ebv_NT %>% 
   group_by(diff_expr) %>% tally() %>% 
-  ggplot(aes(x =  diff_expr))+
+  ggplot(aes(x =  diff_expr,fill = diff_expr))+
   geom_col(aes(y = n),width = .5)+
   geom_text(aes(y = n ,label = comma(n)), vjust= -.5)+
   theme(
@@ -149,13 +152,41 @@ noks_vs_ebv_NT %>%
     legend.position = "none"
   )+
   labs(
-    y = paste("Number of diff. expr. genes",
+    y = paste("Nr. of diff. expr. genes",
               paste0("(FDR <= ",fdr,")"),sep = "\n")
   )+
   scale_y_continuous(labels = comma_format(accuracy = 1e3),
-                     limits = c(0,16.8e3))
+                     limits = c(0,17e3))+
+  scale_fill_brewer(palette = "Set1")
+
+noks_vs_ebv_NT_barplot
 
 ```
+
+### Composite
+
+
+```{r noks_vs_ebv_NT_composite,fig.width=7,fig.height=7}
+
+ggdraw()+
+  draw_plot(
+    noks_vs_ebv_NT_plot+
+      theme(legend.position = "none")
+  )+
+  draw_plot(
+    noks_vs_ebv_NT_barplot+
+      theme(plot.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank()
+            )
+    ,.15,.6,.4,.35
+  )+
+  draw_plot_label(c("A","B"),
+                  x = c(0,.2),y = c(1,.95),size = 16)
+
+
+```
+
 
 ## Figure 4 
 
@@ -170,7 +201,7 @@ scott_data$diff_genes_EBV %<>%
     mutate(diff_expr = if_else(padj <= fdr,"yes","no")) 
 
 
-scott_data$diff_genes_NOKS %>% 
+NT_vs_MC_noks_plot = scott_data$diff_genes_NOKS %>% 
   ggplot(aes(log2FoldChange,log10pval,colour = diff_expr))+
   geom_point(alpha = .5,size =2)+
   labs(
@@ -190,7 +221,9 @@ scott_data$diff_genes_NOKS %>%
   scale_x_continuous(limits = c(-10,10))+
   scale_y_continuous(limits = c(0,150))
 
-scott_data$diff_genes_EBV %>% 
+NT_vs_MC_noks_plot
+
+NT_vs_MC_ebv_plot = scott_data$diff_genes_EBV %>% 
   mutate(diff_expr = if_else(padj <= fdr,"yes","no")) %>% 
   ggplot(aes(log2FoldChange,log10pval,colour = diff_expr))+
   geom_point(alpha = .5,size =2)+
@@ -211,7 +244,7 @@ scott_data$diff_genes_EBV %>%
   scale_x_continuous(limits = c(-10,10))+
   scale_y_continuous(limits = c(0,150))
 
-
+NT_vs_MC_ebv_plot
 
 
 ```
@@ -235,6 +268,23 @@ NT_vs_MC_number_genes =
   ) %>% 
   unnest()
 
+NT_vs_MC_noks_barplot = NT_vs_MC_number_genes %>% 
+  filter(cell == "NOKs") %>% 
+  ggplot(aes(x =  diff_expr,fill = diff_expr))+
+  geom_col(aes(y = n),width = .5)+
+  geom_text(aes(y = n,label = comma(n)), vjust= -.5)+
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none"
+  )+
+  labs(
+    y = paste("Nr. of diff. expr. genes",
+              paste0("(FDR <= ",fdr,")"),sep = "\n")
+  )+
+  scale_y_continuous(labels = comma_format(accuracy = 1e3),
+                     limits = c(0,15e3))+
+  scale_fill_brewer(palette = "Set1")
+
 NT_vs_MC_number_genes %>% 
   ggplot(aes(x =  diff_expr))+
   geom_col(aes(y = n),width = .5)+
@@ -250,6 +300,71 @@ NT_vs_MC_number_genes %>%
   scale_y_continuous(labels = comma_format(accuracy = 1e3),
                      limits = c(0,15e3))+
   facet_grid( ~ cell)
+
+
+NT_vs_MC_ebv_barplot = NT_vs_MC_number_genes %>% 
+  filter(cell != "NOKs") %>% 
+  ggplot(aes(x =  diff_expr,fill = diff_expr))+
+  geom_col(aes(y = n),width = .5)+
+  geom_text(aes(y = n,label = comma(n)), vjust= -.5)+
+  theme(
+    axis.title.x = element_blank(),
+    legend.position = "none"
+  )+
+  labs(
+    y = paste("Nr. of diff. expr. genes",
+              paste0("(FDR <= ",fdr,")"),sep = "\n")
+  )+
+  scale_y_continuous(labels = comma_format(accuracy = 1e3),
+                     limits = c(0,15e3))+
+  scale_fill_brewer(palette = "Set1")
+```
+
+### Composites
+
+```{r NT_vs_MC_noks, fig.width=7,fig.height=7}
+
+ggdraw()+
+  draw_plot(
+    NT_vs_MC_noks_plot+
+      theme(legend.position = "none",
+            plot.title = element_blank(),
+            plot.subtitle = element_blank())
+  )+
+  draw_plot(
+      NT_vs_MC_noks_barplot +
+      theme(plot.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank()
+            )
+    ,.15,.55,.4,.35
+  )+
+  draw_plot_label(c("A","B"),
+                  x = c(0,.15),y = c(1,.95),size = 16)
+
+
+```
+
+```{r NT_vs_MC_ebv, fig.width=7,fig.height=7}
+
+ggdraw()+
+  draw_plot(
+    NT_vs_MC_ebv_plot+
+      theme(legend.position = "none",
+            plot.title = element_blank(),
+            plot.subtitle = element_blank())
+  )+
+  draw_plot(
+      NT_vs_MC_ebv_barplot +
+      theme(plot.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank()
+            )
+    ,.15,.55,.4,.35
+  )+
+  draw_plot_label(c("C","D"),
+                  x = c(0,.15),y = c(1,.95),size = 16)
+
 ```
 
 
@@ -315,6 +430,8 @@ plot(nt_vs_mc_venn,show = list(Faces =  FALSE))
 
 ### Gene expression analysis
 
+We are not going to use these figures, so I am not going to update them.
+
 To make this figure, we need to make some preparations. First, we need to find the genes that are differentially expressed by either the treatment or the cell lines.
 
 ```{r scott_genes_diff , include=FALSE}
@@ -362,7 +479,8 @@ deseq = DESeq(deseq)
 
 scott_data$diff_genes = results(
   deseq,
-  cooksCutoff = FALSE,tidy = TRUE) %>% 
+  cooksCutoff = FALSE,tidy = TRUE,
+  contrast = c("interac","EBV.MC","NOKS.MC")) %>% 
   as_tibble() %>% 
   dplyr::rename(
     gene_id = row
@@ -375,7 +493,7 @@ scott_data$diff_genes = results(
 
 nt_vs_mc = tribble(
     ~ cell, ~ genes,
-    "Both",scott_data %>% pluck("diff_genes"),
+    "NOKs-AKATA MC vs. NOKs MC",scott_data %>% pluck("diff_genes"),
     "NOKs",scott_data %>% pluck("diff_genes_NOKS"),
     "NOKs-AKATA", scott_data %>% pluck("diff_genes_EBV")
   )
@@ -388,6 +506,7 @@ Since we were doing the volcano plots, it would be useful to examine it for this
 
 scott_data$diff_genes %>% 
   mutate(diff_expr = if_else(padj <= fdr,"yes","no")) %>% 
+  na.omit() %>% 
   ggplot(aes(log2FoldChange,log10pval,colour = diff_expr))+
   geom_point(alpha = .5,size =2)+
   labs(
@@ -415,6 +534,7 @@ scott_data %>%
   mutate(
     diff_expr = if_else(padj <= fdr,"yes","no")
   ) %>% 
+  na.omit() %>% 
   group_by(diff_expr) %>% tally() %>% 
   ggplot(aes(x =  diff_expr))+
   geom_col(aes(y = n),width = .5)+
@@ -428,10 +548,14 @@ scott_data %>%
               paste0("(FDR <= ",fdr,")"),sep = "\n")
   )+
   scale_y_continuous(labels = comma_format(accuracy = 1e3),
-                     limits = c(0,12e3))
+                     limits = c(0,15e3))
 
 
 ```
+
+###
+
+
 
 ### Venn diagram {.tabset .tabset-fade}
 
@@ -448,36 +572,7 @@ In the Venn diagrams below, we consider the genes that are differentially expres
 ```{r plot_venn_color,include=FALSE,eval=TRUE}
 
 library(grid)
-
-
-plot_venn <- function(venn , colors)
-{
-  gp = VennThemes(venn)
-  
-  gp[["Face"]][[1]]$fill = "white"
-  gp[["Face"]][[2]]$fill = "white"
-  gp[["Face"]][[3]]$fill = "white"
-  gp[["Face"]][[4]]$fill = "white"
-  gp[["Face"]][[5]]$fill = "white"
-  gp[["Face"]][[6]]$fill = "white"
-  gp[["Face"]][[7]]$fill = "white"
-  gp[["Face"]][[8]]$fill = "white"
-  
-  
-  gp[["Set"]][[1]]$col = colors[1]
-  gp[["Set"]][[2]]$col = colors[2]
-  gp[["Set"]][[3]]$col = colors[3]
-
-  gp[["SetText"]][[1]]$col = colors[1]
-  gp[["SetText"]][[2]]$col = colors[2]
-  gp[["SetText"]][[3]]$col = colors[3]
-
-  
-  grid.newpage()
-  plot(venn,gp = gp)  
-}
-
-
+library(gridExtra)
 
 ```
 
@@ -485,6 +580,11 @@ plot_venn <- function(venn , colors)
 #### All diff expressed genes
 
 ```{r venn_all}
+
+nt_vs_mc %<>%
+  mutate(
+    cell = factor(cell,levels = cell)
+  )
 
 nt_vs_mc_venn = nt_vs_mc %>% 
   unnest() %>% 
@@ -544,6 +644,17 @@ I had a bit of trouble generating the plot below using bars, so I thought to use
 
 library(clusterProfiler)
 
+nt_vs_mc = tribble(
+    ~ cell, ~ genes,
+    "NOKs-AKATA MC vs. NOKs MC",scott_data %>% pluck("diff_genes"),
+    "NOKs",scott_data %>% pluck("diff_genes_NOKS"),
+    "NOKs-AKATA", scott_data %>% pluck("diff_genes_EBV")
+  ) %>% 
+  mutate(
+    cell = factor(cell,levels = cell)
+  )
+
+
 gmt_files =  here::here("data/Pathway") %>% 
   list.files(full.names = TRUE,recursive = TRUE) %>% 
   stri_subset("Intere") %>% 
@@ -582,9 +693,17 @@ nt_vs_mc %<>% crossing(.,gene_lists)
 nt_vs_mc %<>%
   mutate(
     all_genes_list_gsea = map2( all_genes_list, pathways,
-                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE)),
+                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE,
+                                       pvalueCutoff = 1,
+                                       maxGSSize = 1e3,
+                                       seed = TRUE)),
     diff_genes_list_gsea = map2( diff_genes_list, pathways,
-                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE)))
+                                ~ GSEA(.x,TERM2GENE = .y,verbose = FALSE,
+                                       pvalueCutoff = 1,    
+                                       maxGSSize = 1e3,
+                                       seed = TRUE)))
+
+
 
 nt_vs_mc %<>% 
   mutate_at(vars(contains("gsea")),
@@ -597,6 +716,8 @@ nt_vs_mc %<>%
 
 library(ggtech)
 
+padj_filter = 0.1
+
 nt_vs_mc %>% 
   select(cell,all_genes_list_gsea_res) %>% 
   unnest() %>% 
@@ -606,13 +727,19 @@ nt_vs_mc %>%
   arrange(NES) %>% 
   pull(ID) -> all_ids
 
+pathway_df = 
 nt_vs_mc %>% 
   select(cell,all_genes_list_gsea_res) %>% 
   unnest() %>% 
   mutate(
-    only_cell = if_else(str_detect(cell,"NOK"),1,2),
+    only_cell = if_else(!str_detect(cell,"MC"),1,2),
     ID = factor(ID,levels = all_ids)
-  ) %>% 
+  )
+
+pathway_df %>% 
+  group_by(ID) %>% 
+  filter(all(p.adjust <= padj_filter)) %>% 
+  ungroup() %>% 
   ggplot(aes(x = NES,y = ID , color = cell))+
   geom_point(size = 2)+
   theme(legend.position = "top",
@@ -653,7 +780,7 @@ plot_venn(pathway_venn,
 
 nt_vs_mc %>% 
   select(cell,all_genes_list_gsea_res) %>% 
-  unnest() %>% 
+  unnest() %>%
   filter(NES > 0 ) %>% 
   select(cell,ID) %>% 
   {split(.,.$cell)} %>% 
@@ -708,8 +835,11 @@ nt_vs_mc %>%
 nt_vs_mc %>% 
   select(cell,diff_genes_list_gsea_res) %>% 
   unnest() %>% 
+  group_by(ID) %>% 
+  filter(all(p.adjust <= padj_filter)) %>% 
+  ungroup() %>% 
   mutate(
-    only_cell = if_else(str_detect(cell,"NOK"),1,2),
+    only_cell = if_else(!str_detect(cell,"MC"),1,2),
     ID = factor(ID,levels = all_ids)
   ) %>% 
   ggplot(aes(x = NES,y = ID , color = cell))+

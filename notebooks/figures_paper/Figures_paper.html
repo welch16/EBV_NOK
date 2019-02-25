@@ -96,6 +96,9 @@ img {
 button.code-folding-btn:focus {
   outline: none;
 }
+summary {
+  display: list-item;
+}
 </style>
 
 
@@ -206,13 +209,17 @@ $(document).ready(function () {
 <p>Mark mentioned that the idea of this figure is to show that there a not many genes being differentially expressed when comparing NOKS vs EBV. I think that unless we add more elements like:</p>
 <ol style="list-style-type: decimal">
 <li><p>Label genes of interest</p></li>
-<li><p>Add lines resembling the fold change values used for fig. 3B (which I am told is one of the criteria used to draw that figure)</p></li>
+<li><p>Add lines resembling the fold change values used for fig. 3B (which I am told is one of the criteria used to draw that figure)</p></li>
 </ol>
 <p>It only makes harder for the reader to catch the point of the figure. For that purpose, I propose the figure below which compares the number of differentially expressed genes explicitly.</p>
 <p><img src="Figures_paper_files/figure-html/noks_vs_ebv_volcano_plot-1.png" width="480" style="display: block; margin: auto;" /></p>
 <div id="alternative" class="section level3">
 <h3>Alternative</h3>
 <p><img src="Figures_paper_files/figure-html/nr_diff_expr_genes-1.png" width="288" style="display: block; margin: auto;" /></p>
+</div>
+<div id="composite" class="section level3">
+<h3>Composite</h3>
+<p><img src="Figures_paper_files/figure-html/noks_vs_ebv_NT_composite-1.png" width="672" style="display: block; margin: auto;" /></p>
 </div>
 </div>
 <div id="figure-4" class="section level2">
@@ -223,16 +230,25 @@ $(document).ready(function () {
 <h3>Alternative</h3>
 <p><img src="Figures_paper_files/figure-html/NT_vs_MC_barplots-1.png" width="432" style="display: block; margin: auto;" /></p>
 </div>
+<div id="composites" class="section level3">
+<h3>Composites</h3>
+<p><img src="Figures_paper_files/figure-html/NT_vs_MC_noks-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p><img src="Figures_paper_files/figure-html/NT_vs_MC_ebv-1.png" width="672" style="display: block; margin: auto;" /></p>
+</div>
 </div>
 <div id="figure-5" class="section level2">
 <h2>Figure 5</h2>
 <div id="gene-expression-analysis" class="section level3">
 <h3>Gene expression analysis</h3>
+<p>We are not going to use these figures, so I am not going to update them.</p>
 <p>To make this figure, we need to make some preparations. First, we need to find the genes that are differentially expressed by either the treatment or the cell lines.</p>
 <p>Since we were doing the volcano plots, it would be useful to examine it for this set of genes too.</p>
 <p><img src="Figures_paper_files/figure-html/volcano_default%20-1.png" width="384" style="display: block; margin: auto;" /></p>
 <p>Under the same argument as before, I think this could be an alternative to the figure above:</p>
 <p><img src="Figures_paper_files/figure-html/nr_scott_diff_genes-1.png" width="288" style="display: block; margin: auto;" /></p>
+</div>
+<div id="section" class="section level3">
+<h3></h3>
 </div>
 <div id="venn-diagram" class="section level3 tabset tabset-fade">
 <h3>Venn diagram</h3>
@@ -318,7 +334,7 @@ $(document).ready(function () {
 ## 
 ## Linear Hypotheses:
 ##           Estimate Std. Error t value Pr(&gt;|t|)    
-## NOKS == 1 0.797328   0.003247  -62.41   &lt;2e-16 ***
+## NOKS == 1   0.5646     0.0101   -43.1   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## (Adjusted p values reported -- single-step method)</code></pre>
@@ -331,7 +347,7 @@ $(document).ready(function () {
 ## 
 ## Linear Hypotheses:
 ##           Estimate Std. Error t value Pr(&gt;|t|)    
-## NOKS == 1 0.837190   0.004846   -33.6   &lt;2e-16 ***
+## NOKS == 1  0.57728    0.01264  -33.45   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## (Adjusted p values reported -- single-step method)</code></pre>
@@ -343,7 +359,7 @@ $(document).ready(function () {
 ## 
 ## Linear Hypotheses:
 ##           Estimate Std. Error t value Pr(&gt;|t|)    
-## NOKS == 1 0.743457   0.003857  -66.51   &lt;2e-16 ***
+## NOKS == 1  0.57054    0.01581  -27.17   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## (Adjusted p values reported -- single-step method)</code></pre>
@@ -357,20 +373,24 @@ $(document).ready(function () {
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">Both down</td>
-<td align="right">2368</td>
+<td align="left">NA</td>
+<td align="right">2</td>
 </tr>
 <tr class="even">
-<td align="left">Both up</td>
-<td align="right">2294</td>
+<td align="left">Both down</td>
+<td align="right">260</td>
 </tr>
 <tr class="odd">
-<td align="left">EBV down and NOKS up</td>
-<td align="right">9</td>
+<td align="left">Both up</td>
+<td align="right">280</td>
 </tr>
 <tr class="even">
+<td align="left">EBV down and NOKS up</td>
+<td align="right">31</td>
+</tr>
+<tr class="odd">
 <td align="left">EBV up and NOKS down</td>
-<td align="right">45</td>
+<td align="right">40</td>
 </tr>
 </tbody>
 </table>
