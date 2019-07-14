@@ -1,0 +1,292 @@
+---
+title: "Fold change analysis"
+output:
+  html_document:
+    self_contained: no
+    theme: cerulean
+  word_document: default
+---
+
+
+
+```{r setup, include=FALSE,eval=TRUE,echo=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE,eval = TRUE,
+                      include = TRUE,warning = FALSE,
+                      message = FALSE,
+                      fig.width = 7,fig.height = 7,
+                      out.width = 700,
+                      fig.align = "center")
+
+library(here)
+library(cowplot)
+library(rwlib)
+library(Vennerable)
+library(DESeq2)
+library(magrittr)
+library(tidyverse)
+library(scales)
+library(ggrepel)
+library(gridExtra)
+library(conflicted)
+
+conflict_prefer("filter","dplyr")
+conflict_prefer("lag","dplyr")
+conflict_prefer("extract","tidyr")
+conflict_prefer("Position","ggplot2")
+conflict_prefer("col_factor","readr")
+conflict_prefer("discard","purrr")
+conflict_prefer("expand","tidyr")
+conflict_prefer("rename","dplyr")
+conflict_prefer("desc","dplyr")
+conflict_prefer("select","dplyr")
+
+
+
+theme_set(
+  theme_bw()+
+    theme(
+      strip.background = element_blank(),
+      axis.text = element_text(size =12),
+      axis.title = element_text(size = 14),
+      legend.text = element_text(size =12),
+      legend.title = element_text(size = 14)
+      
+    ))
+
+```
+
+
+
+```{r plot_rfuns}
+
+gene_expr_fold_change_plot <- function(DT,xvar,yvar,sc = 10,nbins = 50)
+{
+  pal = viridis::viridis(1e3, option = "D")
+  
+  ggplot(DT,aes_string(xvar,yvar))+stat_binhex(bins = nbins) +
+    scale_fill_gradientn(colours = pal,trans = "log10",
+                         labels = trans_format('log10',math_format(10^.x)),
+                         guide = guide_colourbar(title = NULL,
+                           barheight = unit(0.5,"npc"),
+                           barwidth = unit(0.02,"npc")))+
+    xlim(-sc,sc)+ylim(-sc,sc)+
+    geom_hline(yintercept = 0,linetype = 2, colour = "black")+
+    geom_vline(xintercept = 0,linetype = 2,colour = "black")+
+    geom_abline(slope = 1,intercept = 0,linetype = 2, colour = "red")
+}
+
+as_matrix <- function(x)
+{
+  x %>% 
+    as.data.frame() %>% 
+    tibble::remove_rownames() %>% 
+    tibble::column_to_rownames("gene_id") %>% 
+    as.matrix()
+}
+
+
+```
+
+```{r load_data, include=FALSE}
+
+noks_vs_ebv_NT = here("apps/Fig2_dashboad/fig2data.RData") %>% 
+  load2env() %>% 
+  as.list() %>% 
+  pluck("diff_genes")
+
+scott_data = here("apps/Fig3_dashboad/fig3data.RData") %>% 
+  load2env() %>% 
+  as.list()
+
+new_data = here("apps/Fig5_dashboard/fig5data.RData") %>% 
+  load2env() %>% 
+  as.list()
+
+
+```
+
+__Scott Fold change:__ The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) Quantify the ratio between cell fold changes. 
+
+For b), we considered the $y  = \beta x + \epsilon$ model, where $x$ and $y$ are the $\log_2 \left(\frac{1 + \mbox{mean MC TPM}}{mean NT TPM}\right)$ for the NOKs, and NOKs-AKATA samples respectively. Below, we calculated the $H_0: \beta = 1$ test, representing that 
+
+
+
+
+```{r scott_fold_change, results='hold'}
+
+scott_fc = scott_data$rsem_data %>% 
+  unnest() %>% 
+  mutate(treatment = if_else(treatment == "MC","MC","NT")) %>% 
+  select(file,cell,treatment,gene_id,TPM) %>% 
+  group_by(gene_id,cell,treatment) %>% 
+  summarize(
+    TPM = mean(TPM)
+  ) %>% 
+  spread(treatment,TPM) %>% 
+  mutate(
+    log2fc = log2((1 + MC)/ (1 + NT))
+  ) %>% 
+  select(-MC,-NT) %>% 
+  spread(cell,log2fc)
+
+scott_fc %>% 
+  gene_expr_fold_change_plot("NOKS","EBV",sc = 8,nbins = 60)+
+  coord_fixed()+
+  labs(
+    x = "NOKs",
+    y = "NOKs-AKATA"
+  )+
+  geom_smooth(se = FALSE,method = "lm",formula = y ~ 0 + x,size = 1,
+              colour = "orange",linetype = 2,size = .5,
+              )
+
+
+```
+
+
+
+```{r test,include=TRUE,echo=TRUE,eval=TRUE}
+
+update_geom_defaults("smooth", list(size = .5))
+
+fc_model = lm( EBV ~ 0 + NOKS , data = scott_fc)
+
+multcomp::glht(model = fc_model, linfct = c("NOKS = 1")) %>% 
+  summary()
+
+```
+
+---
+
+__Refereee's comment__
+
+"- Plotting a histogram of the residuals from Figure 6 as a new panel would show if there is anyone gene that is genuinely affected by EBV. If not, then the result that "EBV infection attenuates the differentiation response globally " (line 287) is not very exciting."
+
+__Mark's idea__
+
+ I suspect that the reviewer is not happy that we cannot provide a short list of genes that are the most significantly different between NOKs and NOKs-Akata. My thought is that I can create a histogram of the ratios of gene changes, and then from that create a list of the "top 100" genes, or genes with a ratio above a specific threshold.
+
+__Response:__
+
+I agree with Mark that the referee is not happy that we didn't provided a list of the genes that are differentially expressed. However, I feel that both the referee's and Mark's ideas are a bit lackcluster because those are not proper method to rank genes that are differentially expressed.
+
+When we were working in figuring out to which MC differentiation cell line, the drdz differentiation look like, I provided an analysis that tested for interaction effects using DESeq2, and that test was equivalent to determining the genes such that the fold change look the most different between cell lines. 
+
+```{r fun ,include=TRUE,echo=TRUE,eval=TRUE}
+ratio_of_ratios_deseq <- function(rsem_data,thr = 20)
+{
+  count_matrix =  rsem_data %>% 
+    dplyr::select(file,rsem) %>% 
+    unnest() %>% 
+    dplyr::select(file,gene_id,expected_count) %>% 
+    mutate(
+      expected_count = floor(expected_count)
+      ) %>% 
+    spread(file,expected_count) %>% 
+    as_matrix()
+
+  coldata = rsem_data %>% 
+    dplyr::select(file,cell,treatment) %>% 
+    mutate(interac = paste(cell,treatment, sep = ".")) %>% 
+    as.data.frame() %>% 
+    tibble::remove_rownames() %>% 
+    tibble::column_to_rownames("file")
+
+  deseq = DESeqDataSetFromMatrix(
+    count_matrix,colData = coldata,
+    design = ~ cell + treatment + cell:treatment)
+
+  deseq = deseq[ rowSums(assay(deseq) ) > thr,]
+  deseq = DESeq(deseq, test = "LRT", reduced =  ~ cell + treatment)
+
+  deseq
+  
+}
+
+fc_diff_genes = ratio_of_ratios_deseq(scott_data$rsem_data,20)
+gene_list = results(fc_diff_genes,cooksCutoff = FALSE,tidy = TRUE) %>% 
+  as_tibble() %>% rename(gene_id = row) %>% 
+    select(gene_id,pvalue,padj) %>% 
+  mutate( padj = if_else(is.na(padj),1,padj)) %>% 
+  inner_join(scott_fc,by = "gene_id") %>% 
+  separate(gene_id,into = c("ensembl","symbol"),remove = FALSE) %>% 
+  mutate(
+    reg = case_when(EBV > 0 & NOKS > 0 ~ "Upregulated",
+                    EBV < 0 & NOKS < 0 ~ "Downregulated",
+                    TRUE ~ "Mixed")
+  )
+
+```
+
+
+
+```{r scott_fold_change_wlabel, results='hold'} 
+
+scott_fc %>% 
+  gene_expr_fold_change_plot("NOKS","EBV",sc = 8,nbins = 60)+
+  coord_fixed()+
+  labs(
+    x = "NOKs",
+    y = "NOKs-AKATA"
+  )+
+  geom_smooth(se = FALSE,method = "lm",formula = y ~ 0 + x,size = 1,
+              colour = "orange",linetype = 2,size = .5,
+              )+
+  geom_label_repel(data = filter(gene_list,padj <= .01), aes(label = symbol,colour = reg),
+                   show.legend = FALSE)+
+  scale_color_manual(values = c("blue","black","red"))
+
+```
+
+```{r residuals,include=TRUE,echo=FALSE,eval=TRUE,results='hold',fig.height=3}
+
+
+scott_model = lm( EBV ~ 0 + NOKS,data = scott_fc)
+
+gene_list %<>% 
+  mutate(
+    residuals = residuals(scott_model)
+  )
+
+
+gene_list %>% 
+  ggplot(aes(residuals))+
+  geom_histogram(bins = 51,fill = "white",colour = "black",
+                 aes(y = ..density..))+
+  geom_text_repel(data = filter(gene_list,padj <= .01), aes(y = 0, label = symbol,colour = reg),
+                   show.legend = FALSE,angle = 90,hjust = -.1,nudge_y = .3)+
+  scale_color_manual(values = c("blue","black","red"))+
+  theme(
+    axis.title.y = element_blank()
+  )
+
+```
+
+```{r residuals2,include=TRUE,echo=FALSE,eval=TRUE,results='hold',fig.height=3}
+
+
+
+gene_list %>% 
+  ggplot(aes(residuals))+
+  geom_histogram(bins = 51,fill = "white",colour = "black",
+                 aes(y = ..density..))+
+  theme(
+    axis.title.y = element_blank()
+  )
+
+```
+
+```{r save_file,include=FALSE,echo=FALSE,eval=TRUE}
+
+gene_list %>% 
+  write_csv(file.path(getwd(),"scott_fold_change_diff_genes.csv"))
+
+```
+
+
+
+
+
+
+

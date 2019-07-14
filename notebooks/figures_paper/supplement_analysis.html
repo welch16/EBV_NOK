@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+
+
+<title>Fold change analysis</title>
+
+<script src="supplement_analysis_files/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="supplement_analysis_files/bootstrap-3.3.5/css/cerulean.min.css" rel="stylesheet" />
+<script src="supplement_analysis_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="supplement_analysis_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="supplement_analysis_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="supplement_analysis_files/navigation-1.1/tabsets.js"></script>
+<link href="supplement_analysis_files/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="supplement_analysis_files/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Fold change analysis</h1>
+
+</div>
+
+
+<p><strong>Scott Fold change:</strong> The idea of this figure is two fold. a) Compare the MC over NT fold change between NOKS and EBV cell lines. b) Quantify the ratio between cell fold changes.</p>
+<p>For b), we considered the <span class="math inline">\(y = \beta x + \epsilon\)</span> model, where <span class="math inline">\(x\)</span> and <span class="math inline">\(y\)</span> are the <span class="math inline">\(\log_2 \left(\frac{1 + \mbox{mean MC TPM}}{mean NT TPM}\right)\)</span> for the NOKs, and NOKs-AKATA samples respectively. Below, we calculated the <span class="math inline">\(H_0: \beta = 1\)</span> test, representing that</p>
+<p><img src="supplement_analysis_files/figure-html/scott_fold_change-1.png" width="700" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>update_geom_defaults(&quot;smooth&quot;, list(size = .5))
+
+fc_model = lm( EBV ~ 0 + NOKS , data = scott_fc)
+
+multcomp::glht(model = fc_model, linfct = c(&quot;NOKS = 1&quot;)) %&gt;% 
+  summary()</code></pre>
+<pre><code>## 
+##   Simultaneous Tests for General Linear Hypotheses
+## 
+## Fit: lm(formula = EBV ~ 0 + NOKS, data = scott_fc)
+## 
+## Linear Hypotheses:
+##           Estimate Std. Error t value Pr(&gt;|t|)    
+## NOKS == 1 0.750509   0.002312  -107.9   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## (Adjusted p values reported -- single-step method)</code></pre>
+<hr />
+<p><strong>Refereee’s comment</strong></p>
+<p>“- Plotting a histogram of the residuals from Figure 6 as a new panel would show if there is anyone gene that is genuinely affected by EBV. If not, then the result that”EBV infection attenuates the differentiation response globally " (line 287) is not very exciting."</p>
+<p><strong>Mark’s idea</strong></p>
+<p>I suspect that the reviewer is not happy that we cannot provide a short list of genes that are the most significantly different between NOKs and NOKs-Akata. My thought is that I can create a histogram of the ratios of gene changes, and then from that create a list of the “top 100” genes, or genes with a ratio above a specific threshold.</p>
+<p><strong>Response:</strong></p>
+<p>I agree with Mark that the referee is not happy that we didn’t provided a list of the genes that are differentially expressed. However, I feel that both the referee’s and Mark’s ideas are a bit lackcluster because those are not proper method to rank genes that are differentially expressed.</p>
+<p>When we were working in figuring out to which MC differentiation cell line, the drdz differentiation look like, I provided an analysis that tested for interaction effects using DESeq2, and that test was equivalent to determining the genes such that the fold change look the most different between cell lines.</p>
+<pre class="r"><code>ratio_of_ratios_deseq &lt;- function(rsem_data,thr = 20)
+{
+  count_matrix =  rsem_data %&gt;% 
+    dplyr::select(file,rsem) %&gt;% 
+    unnest() %&gt;% 
+    dplyr::select(file,gene_id,expected_count) %&gt;% 
+    mutate(
+      expected_count = floor(expected_count)
+      ) %&gt;% 
+    spread(file,expected_count) %&gt;% 
+    as_matrix()
+
+  coldata = rsem_data %&gt;% 
+    dplyr::select(file,cell,treatment) %&gt;% 
+    mutate(interac = paste(cell,treatment, sep = &quot;.&quot;)) %&gt;% 
+    as.data.frame() %&gt;% 
+    tibble::remove_rownames() %&gt;% 
+    tibble::column_to_rownames(&quot;file&quot;)
+
+  deseq = DESeqDataSetFromMatrix(
+    count_matrix,colData = coldata,
+    design = ~ cell + treatment + cell:treatment)
+
+  deseq = deseq[ rowSums(assay(deseq) ) &gt; thr,]
+  deseq = DESeq(deseq, test = &quot;LRT&quot;, reduced =  ~ cell + treatment)
+
+  deseq
+  
+}
+
+fc_diff_genes = ratio_of_ratios_deseq(scott_data$rsem_data,20)
+gene_list = results(fc_diff_genes,cooksCutoff = FALSE,tidy = TRUE) %&gt;% 
+  as_tibble() %&gt;% rename(gene_id = row) %&gt;% 
+    select(gene_id,pvalue,padj) %&gt;% 
+  mutate( padj = if_else(is.na(padj),1,padj)) %&gt;% 
+  inner_join(scott_fc,by = &quot;gene_id&quot;) %&gt;% 
+  separate(gene_id,into = c(&quot;ensembl&quot;,&quot;symbol&quot;),remove = FALSE) %&gt;% 
+  mutate(
+    reg = case_when(EBV &gt; 0 &amp; NOKS &gt; 0 ~ &quot;Upregulated&quot;,
+                    EBV &lt; 0 &amp; NOKS &lt; 0 ~ &quot;Downregulated&quot;,
+                    TRUE ~ &quot;Mixed&quot;)
+  )</code></pre>
+<p><img src="supplement_analysis_files/figure-html/scott_fold_change_wlabel-1.png" width="700" style="display: block; margin: auto;" /></p>
+<p><img src="supplement_analysis_files/figure-html/residuals-1.png" width="700" style="display: block; margin: auto;" /></p>
+<p><img src="supplement_analysis_files/figure-html/residuals2-1.png" width="700" style="display: block; margin: auto;" /></p>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
